@@ -45,7 +45,15 @@ export async function getMyProfile() {
 /** Update the current user's profile. */
 export async function updateMyProfile(profileData) {
   try {
-    const response = await apiClient.patch('/api/members/me', profileData);
+    const config =
+      typeof FormData !== 'undefined' && profileData instanceof FormData
+        ? { headers: { 'Content-Type': undefined } }
+        : undefined;
+    const response = await apiClient.patch(
+      '/api/members/me',
+      profileData,
+      config
+    );
     return response.data.user;
   } catch (error) {
     throw new Error(extractErrorMessage(error, 'Failed to update profile'));
@@ -69,6 +77,28 @@ export async function getMemberById(memberId) {
     return response.data;
   } catch (error) {
     throw new Error(extractErrorMessage(error, 'Failed to load member'));
+  }
+}
+
+/** Update a member (admin only). */
+export async function updateMember(memberId, memberData) {
+  try {
+    const response = await apiClient.put(
+      `/api/members/${memberId}`,
+      memberData
+    );
+    return response.data.member;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, 'Failed to update member'));
+  }
+}
+
+/** Soft-delete a member (admin only). */
+export async function deleteMember(memberId) {
+  try {
+    await apiClient.delete(`/api/members/${memberId}`);
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, 'Failed to delete member'));
   }
 }
 

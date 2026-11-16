@@ -35,7 +35,7 @@ gym-system/
     │   ├── routing/        ← ProtectedRoute, GuestRoute, ScrollToHash
     │   └── ui/             ← tiny reusable pieces: Button, Icon, SectionHeading, ImageSlot...
     ├── context/            ← AuthContext.jsx (who is logged in + login/register/logout)
-    ├── services/           ← authService.js (mock API – replace with your backend later)
+    ├── services/           ← API client and wrappers for auth, members, plans, subscriptions, payments, and attendance
     ├── hooks/              ← custom hooks (useCountUp)
     ├── utils/              ← validators.js (form validation functions)
     ├── data/               ← all page text/numbers (landing.js)

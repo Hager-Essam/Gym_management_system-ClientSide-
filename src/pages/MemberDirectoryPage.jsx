@@ -1,19 +1,156 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from '../components/ui/Icon.jsx';
 import Button from '../components/ui/Button.jsx';
 import DashboardNav from '../components/layout/DashboardNav.jsx';
-import { memberDirectoryData } from '../data/memberDirectoryData.js';
+import { getAllMembers } from '../services/memberService.js';
 import './MemberDirectoryPage.css';
+
+function mapDirectoryMember(member) {
+  const subscription = member.subscription;
+  const endDate = subscription?.endDate
+    ? new Date(subscription.endDate)
+    : null;
+  const daysUntilEnd = endDate
+    ? Math.ceil((endDate.getTime() - Date.now()) / 86400000)
+    : null;
+  const activeSubscription = subscription?.status === 'active';
+  const name = member.fullName || 'Member';
+
+  return {
+    ...member,
+    name,
+    rosterId: member.id,
+    initials: name
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase(),
+    avatarColor: 'blue',
+    verified: false,
+    tier: {
+      name: subscription?.planName || 'No active plan',
+      class: 'tier1',
+      details: subscription?.status || 'No subscription',
+    },
+    coach: null,
+    attendance: {
+      recent: false,
+      daysAgo: 'No attendance data',
+      location: '—',
+    },
+    expiry: {
+      text: activeSubscription
+        ? daysUntilEnd !== null && daysUntilEnd <= 7
+          ? `Expires in ${Math.max(daysUntilEnd, 0)} days`
+          : 'Active'
+        : 'No active subscription',
+      class: activeSubscription
+        ? daysUntilEnd !== null && daysUntilEnd <= 7
+          ? 'expiring'
+          : 'active'
+        : 'expired',
+      date: endDate ? endDate.toLocaleDateString() : '—',
+      action: null,
+    },
+    payment: {
+      status: '—',
+      class: 'pending',
+      method: 'Not available in roster data',
+      details: '',
+    },
+  };
+}
 
 export default function MemberDirectoryPage() {
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [statusFilter, setStatusFilter] = useState('All Statuses');
   const [planFilter, setPlanFilter] = useState('All Plans');
   const [trainerFilter, setTrainerFilter] = useState('All Coaches');
+  const [members, setMembers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const stats = memberDirectoryData.stats;
-  const members = memberDirectoryData.members;
+  useEffect(() => {
+    let active = true;
+
+    async function loadMembers() {
+      setLoading(true);
+      setError('');
+
+      try {
+        const pageSize = 100;
+        const firstPage = await getAllMembers({ page: 1, limit: pageSize });
+        const pageCount = firstPage.pagination?.totalPages || 1;
+        const remainingPages = await Promise.all(
+          Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) =>
+            getAllMembers({ page: index + 2, limit: pageSize })
+          )
+        );
+        const rows = [
+          ...(firstPage.members || []),
+          ...remainingPages.flatMap((page) => page.members || []),
+        ];
+
+        if (active) setMembers(rows.map(mapDirectoryMember));
+      } catch (loadError) {
+        if (active) setError(loadError.message || 'Unable to load members.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadMembers();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const activeSubscriptions = members.filter(
+    (member) => member.subscription?.status === 'active'
+  ).length;
+  const expiringCount = members.filter((member) => {
+    const endDate = member.subscription?.endDate;
+    if (member.subscription?.status !== 'active' || !endDate) return false;
+    const daysLeft = Math.ceil((new Date(endDate).getTime() - Date.now()) / 86400000);
+    return daysLeft >= 0 && daysLeft <= 7;
+  }).length;
+  const suspendedCount = members.filter(
+    (member) => member.status === 'suspended'
+  ).length;
+  const activePercent = members.length
+    ? `${Math.round((activeSubscriptions / members.length) * 100)}%`
+    : '0%';
+  const stats = {
+    totalRegistered: members.length,
+    totalChange: 0,
+    totalCapacity: 'Current roster from the API',
+    activeSubscriptions,
+    activeHealthPercentage: activePercent,
+    activeHealthText: 'Members with an active subscription',
+    expiringCount,
+    expiringText: 'Subscriptions ending within seven days',
+    expiringSubtext: 'Based on current API data',
+    suspendedCount,
+    suspendedChange: '—',
+    suspendedText: 'Members with suspended accounts',
+    suspendedSubtext: 'Current API status',
+  };
+
+  const visibleMembers = members.filter((member) => {
+    const query = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      member.name.toLowerCase().includes(query) ||
+      member.email?.toLowerCase().includes(query) ||
+      member.id.toLowerCase().includes(query);
+    const matchesStatus =
+      statusFilter === 'All Statuses' ||
+      member.status.toLowerCase() === statusFilter.toLowerCase();
+    return matchesSearch && matchesStatus;
+  });
 
   const toggleMember = (id) => {
     setSelectedMembers(prev =>
@@ -23,7 +160,9 @@ export default function MemberDirectoryPage() {
 
   const toggleAll = () => {
     setSelectedMembers(prev =>
-      prev.length === members.length ? [] : members.map(m => m.id)
+      prev.length === visibleMembers.length
+        ? []
+        : visibleMembers.map(m => m.id)
     );
   };
 
@@ -126,7 +265,7 @@ export default function MemberDirectoryPage() {
         <header className="member-directory__header">
           <div>
             <h1 className="member-directory__title">Member Directory & Subscriptions</h1>
-            <p className="text-muted">Complete membership roster, access permissions, biometric credentials, trainer assignments, and renewal status across all active facility nodes.</p>
+            <p className="text-muted">Member roster, account status, and current subscription details from the gym API.</p>
           </div>
           <div className="member-directory__header-actions">
             <Button variant="outline" size="sm">
@@ -136,10 +275,6 @@ export default function MemberDirectoryPage() {
             <Button variant="outline" size="sm">
               <Icon name="bolt" />
               Bulk Actions ({selectedMembers.length} selected)
-            </Button>
-            <Button variant="primary" size="sm">
-              <Icon name="add" />
-              Add Member
             </Button>
           </div>
         </header>
@@ -155,7 +290,7 @@ export default function MemberDirectoryPage() {
               <div className="member-directory__stat-value">
                 <span className="stat-number">{stats.totalRegistered}</span>
                 <span className={`member-directory__stat-change ${stats.totalChange >= 0 ? 'positive' : 'negative'}`}>
-                  +{stats.totalChange}%
+                  {stats.totalChange ? `+${stats.totalChange}%` : '—'}
                 </span>
               </div>
               <p className="text-xs text-muted">{stats.totalCapacity}</p>
@@ -181,7 +316,7 @@ export default function MemberDirectoryPage() {
               </div>
               <p className="text-xs text-muted">{stats.activeHealthText}</p>
               <div className="member-directory__progress-bar">
-                <div className="member-directory__progress-fill success" style={{ width: '88%' }}></div>
+                <div className="member-directory__progress-fill success" style={{ width: stats.activeHealthPercentage }}></div>
               </div>
             </div>
           </div>
@@ -226,14 +361,25 @@ export default function MemberDirectoryPage() {
         <div className="member-directory__filters">
           <div className="member-directory__search">
             <Icon name="search" size={20} />
-            <input type="text" placeholder="Search by member / ID / email..." />
+            <input
+              type="text"
+              placeholder="Search by member / ID / email..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
           </div>
 
           <div className="member-directory__filter-group">
-            <button className="member-directory__filter-btn">
-              STATUS: <span>{statusFilter}</span>
-              <Icon name="expand_more" size={16} />
-            </button>
+            <select
+              className="member-directory__filter-btn"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              aria-label="Filter members by status"
+            >
+              <option>All Statuses</option>
+              <option>active</option>
+              <option>suspended</option>
+            </select>
             <button className="member-directory__filter-btn">
               TIER: <span>{planFilter}</span>
               <Icon name="expand_more" size={16} />
@@ -270,11 +416,11 @@ export default function MemberDirectoryPage() {
           </button>
           <button className="member-directory__tab">
             Expired / Lapsed
-            <span className="member-directory__tab-count critical">86</span>
+            <span className="member-directory__tab-count critical">—</span>
           </button>
           <button className="member-directory__tab">
             Staff / Comp
-            <span className="member-directory__tab-count">12</span>
+            <span className="member-directory__tab-count">—</span>
           </button>
           <button className="member-directory__tab">
             Faulty Data / Med
@@ -289,7 +435,7 @@ export default function MemberDirectoryPage() {
           <div className="member-directory__table-col checkbox">
             <input
               type="checkbox"
-              checked={selectedMembers.length === members.length}
+              checked={visibleMembers.length > 0 && selectedMembers.length === visibleMembers.length}
               onChange={toggleAll}
             />
           </div>
@@ -315,7 +461,12 @@ export default function MemberDirectoryPage() {
 
         {/* Member Rows */}
         <div className="member-directory__table-body">
-          {members.map((member) => (
+          {error && <p className="admin-form__alert admin-form__alert--error" role="alert">{error}</p>}
+          {loading && <p role="status">Loading members…</p>}
+          {!loading && !error && visibleMembers.length === 0 && (
+            <p className="text-muted">No members match this search.</p>
+          )}
+          {visibleMembers.map((member) => (
             <div key={member.id} className={`member-directory__row ${member.status.toLowerCase()}`}>
               <div className="member-directory__table-col checkbox">
                 <input

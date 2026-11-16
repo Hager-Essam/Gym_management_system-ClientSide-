@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useMemberProfile } from '../../context/MemberProfileContext';
+import { getProfilePictureUrl } from '../../utils/profilePicture.js';
 import Icon from '../ui/Icon';
 import './userMenu.css';
 
@@ -11,6 +12,30 @@ const ROLE_LABELS = {
   coach: 'Coach',
   member: 'Member',
 };
+
+function UserAvatar({ imageUrl, initial, large = false }) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [imageUrl]);
+
+  return (
+    <span
+      className={`user-menu__avatar${large ? ' user-menu__avatar--large' : ''}${imageUrl && !imageFailed ? ' user-menu__avatar--image' : ''}`}
+    >
+      {imageUrl && !imageFailed ? (
+        <img
+          src={imageUrl}
+          alt=""
+          onError={() => setImageFailed(true)}
+        />
+      ) : (
+        initial
+      )}
+    </span>
+  );
+}
 
 export default function UserMenu({ onLogout, className = '' }) {
   const { user, logout } = useAuth();
@@ -29,6 +54,9 @@ export default function UserMenu({ onLogout, className = '' }) {
 
   const email = member?.email || user?.email || '';
   const initial = name.trim().charAt(0).toUpperCase() || 'M';
+  const profilePictureUrl = getProfilePictureUrl(
+    member?.profilePicture || user?.profilePicture || user?.profile_picture_url
+  );
   const roleLabel = ROLE_LABELS[user?.role] || 'Member';
   const isMember = !user?.role || user?.role === 'member';
 
@@ -83,7 +111,7 @@ export default function UserMenu({ onLogout, className = '' }) {
         aria-haspopup="menu"
         aria-label="Open account menu"
       >
-        <span className="user-menu__avatar">{initial}</span>
+        <UserAvatar imageUrl={profilePictureUrl} initial={initial} />
 
         <span className="user-menu__trigger-name">{name}</span>
 
@@ -97,9 +125,7 @@ export default function UserMenu({ onLogout, className = '' }) {
       {isOpen && (
         <div className="user-menu__dropdown" role="menu">
           <div className="user-menu__identity">
-            <span className="user-menu__avatar user-menu__avatar--large">
-              {initial}
-            </span>
+            <UserAvatar imageUrl={profilePictureUrl} initial={initial} large />
 
             <div className="user-menu__identity-details">
               <strong>{name}</strong>

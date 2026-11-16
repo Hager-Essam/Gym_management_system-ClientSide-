@@ -1,5 +1,19 @@
 # Backend API Integration - Complete
 
+## Current React endpoint coverage
+
+The React app now uses the Node API for authentication, member profiles and
+attendance history, public plans and admin plan management, member management,
+subscriptions, payments, attendance check-in/out, and the `/health` status
+indicator. Admin views use the API rather than localStorage for members and
+plans; subscription, payment, and attendance sections load live API data.
+
+The backend does not currently expose admin endpoints to create staff or
+members. Admin member creation is therefore not offered; the existing
+trainer/manager forms remain local demo functionality. The frontend also does
+not submit payments through `POST /api/payments`, which currently records a
+payment as completed without a payment-provider workflow.
+
 ## ✅ What Was Done
 
 I've successfully integrated your gym management system with the backend API while **preserving all your existing UI design**.
@@ -130,7 +144,11 @@ The system automatically uses:
 
 ---
 
-## 🚀 Next Steps for You
+> The historical examples below describe the earlier integration stage and are
+> superseded by the current endpoint coverage at the top of this document.
+> Check the service files and active pages before following those examples.
+
+## 🚀 Historical Next Steps
 
 ### 1. Update Existing Pages to Use Real Data
 

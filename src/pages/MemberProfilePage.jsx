@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMemberProfile } from '../context/MemberProfileContext.jsx';
 import Button from '../components/ui/Button.jsx';
 import DashboardNav from '../components/layout/DashboardNav.jsx';
@@ -6,6 +6,7 @@ import {
   getProfileCompletion,
   validateProfileForm,
 } from '../utils/profileCompletion.js';
+import { getProfilePictureUrl } from '../utils/profilePicture.js';
 import './MemberProfilePage.css';
 
 export default function MemberProfilePage() {
@@ -22,8 +23,66 @@ export default function MemberProfilePage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+  const [pictureFile, setPictureFile] = useState(null);
+  const [picturePreview, setPicturePreview] = useState('');
+  const [pictureSaving, setPictureSaving] = useState(false);
 
   const [form, setForm] = useState(null);
+
+  useEffect(() => {
+    if (!picturePreview.startsWith('blob:')) return undefined;
+    return () => URL.revokeObjectURL(picturePreview);
+  }, [picturePreview]);
+
+  function handlePictureChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const acceptedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!acceptedTypes.includes(file.type)) {
+      setError('Choose a JPEG, PNG, or WebP image.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('The profile photo must be 5 MB or smaller.');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setPictureFile(file);
+    setPicturePreview(URL.createObjectURL(file));
+  }
+
+  function cancelPictureChange() {
+    setPictureFile(null);
+    setPicturePreview('');
+    setError('');
+  }
+
+  async function savePicture() {
+    if (!pictureFile) return;
+
+    setPictureSaving(true);
+    setError('');
+    setSuccess('');
+
+    const payload = new FormData();
+    payload.append('profilePicture', pictureFile);
+
+    try {
+      await updateProfile(payload);
+      setPictureFile(null);
+      setPicturePreview('');
+      setSuccess('Your profile photo has been updated.');
+    } catch (err) {
+      setError(err.message || 'Failed to update your profile photo.');
+    } finally {
+      setPictureSaving(false);
+    }
+  }
 
   function startEditing() {
     setForm({
@@ -134,6 +193,7 @@ export default function MemberProfilePage() {
   }
 
   const firstLetter = member.fullName?.trim()?.charAt(0).toUpperCase() || 'M';
+  const profilePictureUrl = getProfilePictureUrl(member.profilePicture);
 
   const joinedDate = member.createdAt
     ? new Date(member.createdAt).toLocaleDateString()
@@ -149,8 +209,51 @@ export default function MemberProfilePage() {
         <div className="profile-container">
 
         <section className="profile-hero">
-          <div className="profile-avatar">
-            {firstLetter}
+          <div className="profile-picture">
+            <div className={`profile-avatar ${picturePreview || profilePictureUrl ? 'profile-avatar--image' : ''}`}>
+              {(picturePreview || profilePictureUrl) ? (
+                <img
+                  src={picturePreview || profilePictureUrl}
+                  alt={`${member.fullName}'s profile`}
+                />
+              ) : (
+                firstLetter
+              )}
+            </div>
+            <div className="profile-picture-actions">
+              <label className="profile-picture-control">
+                Choose photo
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handlePictureChange}
+                  disabled={pictureSaving}
+                  aria-label="Choose profile photo"
+                />
+              </label>
+              {pictureFile && (
+                <>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={savePicture}
+                    disabled={pictureSaving}
+                  >
+                    {pictureSaving ? 'Uploading…' : 'Save photo'}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={cancelPictureChange}
+                    disabled={pictureSaving}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              )}
+            </div>
+            <span className="profile-picture-hint">JPEG, PNG, or WebP · max 5 MB</span>
           </div>
 
           <div className="profile-hero-info">

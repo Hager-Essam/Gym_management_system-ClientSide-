@@ -37,10 +37,48 @@ function extractErrorMessage(error, fallback) {
 export async function createSubscription(subscriptionData) {
   try {
     const response = await apiClient.post('/api/subscriptions', subscriptionData);
-    return response.data;
+    return response.data.subscription ?? response.data;
   } catch (error) {
     throw new Error(
       extractErrorMessage(error, 'Failed to create subscription')
+    );
+  }
+}
+
+/** List subscriptions (admin/manager only). */
+export async function getAllSubscriptions(params = {}) {
+  try {
+    const response = await apiClient.get('/api/subscriptions', { params });
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      extractErrorMessage(error, 'Failed to load subscriptions')
+    );
+  }
+}
+
+/** List active subscriptions expiring soon (admin/manager only). */
+export async function getExpiringSubscriptions(days = 7) {
+  try {
+    const response = await apiClient.get('/api/subscriptions/expiring', {
+      params: { days },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      extractErrorMessage(error, 'Failed to load expiring subscriptions')
+    );
+  }
+}
+
+/** Get a subscription by ID. */
+export async function getSubscriptionById(subscriptionId) {
+  try {
+    const response = await apiClient.get(`/api/subscriptions/${subscriptionId}`);
+    return response.data.subscription ?? response.data;
+  } catch (error) {
+    throw new Error(
+      extractErrorMessage(error, 'Failed to load subscription')
     );
   }
 }
@@ -69,7 +107,7 @@ export async function updateSubscription(subscriptionId, data) {
       data
     );
 
-    return response.data;
+    return response.data.subscription ?? response.data;
   } catch (error) {
     throw new Error(
       extractErrorMessage(error, 'Failed to update subscription')

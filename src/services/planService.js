@@ -71,3 +71,34 @@ export async function getPlanById(planId) {
     throw new Error(extractErrorMessage(error, 'Failed to load plan'));
   }
 }
+
+/** Create a membership plan (admin only). */
+export async function createPlan(planData) {
+  try {
+    const response = await apiClient.post('/api/plans', planData);
+    const payload = response?.data ?? response;
+    return payload?.plan ?? payload;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, 'Failed to create plan'));
+  }
+}
+
+/** Update a membership plan (admin only). */
+export async function updatePlan(planId, planData) {
+  try {
+    const response = await apiClient.put(`/api/plans/${planId}`, planData);
+    const payload = response?.data ?? response;
+    return payload?.plan ?? payload;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, 'Failed to update plan'));
+  }
+}
+
+/** Delete a membership plan (admin only). */
+export async function deletePlan(planId) {
+  try {
+    await apiClient.delete(`/api/plans/${planId}`);
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, 'Failed to delete plan'));
+  }
+}

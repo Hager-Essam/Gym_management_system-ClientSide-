@@ -2,7 +2,7 @@ import { useState } from 'react';
 import FormField from '../auth/FormField.jsx';
 import Button from '../ui/Button.jsx';
 import Icon from '../ui/Icon.jsx';
-import { createPlan } from '../../services/dataService.js';
+import { createPlan } from '../../services/planService.js';
 import './AdminForms.css';
 
 export default function AddPlanForm({ onSuccess, onCancel }) {
@@ -67,9 +67,13 @@ export default function AddPlanForm({ onSuccess, onCancel }) {
       const features = values.features.filter(f => f.trim() !== '');
       
       const newPlan = await createPlan({
-        ...values,
+        name: values.name.trim(),
+        duration: values.duration,
+        description: values.description,
         price,
-        maxClasses: values.maxClasses ? parseInt(values.maxClasses) : null,
+        accessLevel: values.accessLevel,
+        maxClasses: values.maxClasses ? parseInt(values.maxClasses, 10) : null,
+        includesPersonalTraining: values.personalTraining,
         features,
       });
       

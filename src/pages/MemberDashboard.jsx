@@ -9,6 +9,7 @@ import {
   getMemberAttendance,
   getMemberSubscriptions,
 } from '../services/memberService.js';
+import { getMyPayments } from '../services/paymentService.js';
 import {
   formatDuration,
   formatVisitDay,
@@ -49,6 +50,7 @@ export default function MemberDashboard() {
   } = useMemberProfile();
 
   const [subscriptions, setSubscriptions] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [visits, setVisits] = useState([]);
   const [visitPagination, setVisitPagination] = useState(null);
   const [monthVisits, setMonthVisits] = useState(null);
@@ -57,6 +59,7 @@ export default function MemberDashboard() {
   const [visitError, setVisitError] = useState('');
   const [monthError, setMonthError] = useState('');
   const [membershipError, setMembershipError] = useState('');
+  const [paymentError, setPaymentError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
 
   const [loadingMore, setLoadingMore] = useState(false);
@@ -72,13 +75,15 @@ export default function MemberDashboard() {
     setVisitError('');
     setMonthError('');
     setMembershipError('');
+    setPaymentError('');
 
     Promise.allSettled([
       getMemberAttendance(member.id, { page: 1, limit: VISITS_PER_PAGE }),
       getMemberSubscriptions(member.id),
       getMemberAttendance(member.id, { startDate: monthStart, limit: 1 }),
+      getMyPayments(member.id, { page: 1, limit: 5 }),
     ])
-      .then(([visitsResult, subscriptionsResult, monthResult]) => {
+      .then(([visitsResult, subscriptionsResult, monthResult, paymentsResult]) => {
         if (!active) return;
 
         if (visitsResult.status === 'fulfilled') {
@@ -113,6 +118,15 @@ export default function MemberDashboard() {
           setMonthError(
             monthResult.reason?.message ||
               'Unable to load this month’s check-ins.'
+          );
+        }
+
+        if (paymentsResult.status === 'fulfilled') {
+          setPayments(paymentsResult.value?.payments || []);
+        } else {
+          setPayments([]);
+          setPaymentError(
+            paymentsResult.reason?.message || 'Unable to load payment history.'
           );
         }
       })
@@ -479,39 +493,49 @@ export default function MemberDashboard() {
               </section>
 
               <section className="card member-dash__card">
-                <div className="member-dash__unavailable-head">
-                  <Icon name="lock_clock" size={24} />
-
-                  <div>
-                    <h2 className="member-dash__card-title">
-                      Not available in the portal yet
-                    </h2>
-
-                    <p className="text-muted text-sm">
-                      These areas need backend modules the gym API does not
-                      expose to member accounts yet.
-                    </p>
-                  </div>
+                <div className="member-dash__card-header">
+                  <h2 className="member-dash__card-title">Recent payments</h2>
+                  {paymentError && (
+                    <button type="button" className="member-dash__more" onClick={retry}>
+                      Retry
+                    </button>
+                  )}
                 </div>
 
-                <ul className="member-dash__unavailable-list">
-                  <li>
-                    <Icon name="event" size={16} />
-                    Class schedules and bookings
-                  </li>
-                  <li>
-                    <Icon name="fitness_center" size={16} />
-                    Workout programs and set logging
-                  </li>
-                  <li>
-                    <Icon name="monitor_weight" size={16} />
-                    Body-composition scans
-                  </li>
-                  <li>
-                    <Icon name="receipt_long" size={16} />
-                    Invoices and receipts
-                  </li>
-                </ul>
+                {paymentError && (
+                  <p className="member-dash__inline-error-text" role="alert">
+                    {paymentError}
+                  </p>
+                )}
+
+                {dataLoading ? (
+                  <p className="text-muted text-sm">Loading payment history…</p>
+                ) : payments.length > 0 ? (
+                  <ul className="member-dash__visits">
+                    {payments.map((payment) => (
+                      <li key={payment.id} className="member-dash__visit">
+                        <div>
+                          <strong>{payment.description || payment.payment_type || 'Membership payment'}</strong>
+                          <p className="text-xs text-muted">
+                            {payment.invoice_number || payment.payment_method || 'Payment'}
+                            {payment.created_at
+                              ? ` · ${new Date(payment.created_at).toLocaleDateString()}`
+                              : ''}
+                          </p>
+                        </div>
+                        <span>
+                          {payment.amount} {payment.currency} · {payment.status}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : !paymentError ? (
+                  <p className="text-muted text-sm">No payments found.</p>
+                ) : null}
+
+                <p className="text-xs text-muted">
+                  Class schedules, workout programs, and body-composition scans are not available in the API yet.
+                </p>
               </section>
             </div>
 

@@ -4,30 +4,69 @@ import Icon from '../components/ui/Icon.jsx';
 import Button from '../components/ui/Button.jsx';
 import DashboardNav from '../components/layout/DashboardNav.jsx';
 import Modal from '../components/ui/Modal.jsx';
-import AddMemberForm from '../components/admin/AddMemberForm.jsx';
 import AddTrainerForm from '../components/admin/AddTrainerForm.jsx';
 import AddManagerForm from '../components/admin/AddManagerForm.jsx';
 import AddPlanForm from '../components/admin/AddPlanForm.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { adminDashboardData } from '../data/adminDashboardData.js';
 import { 
-  getMembers, 
   getTrainers, 
   getManagers, 
-  getAllPlans,
   deleteUser, 
   suspendUser, 
   activateUser,
-  deletePlan,
-  activatePlan,
-  deactivatePlan,
-  getStatistics 
 } from '../services/dataService.js';
+import {
+  deleteMember,
+  getAllMembers,
+  getMemberById,
+  updateMember,
+} from '../services/memberService.js';
+import {
+  deletePlan,
+  getAllPlans,
+  updatePlan,
+} from '../services/planService.js';
+import {
+  cancelSubscription,
+  getAllSubscriptions,
+  getExpiringSubscriptions,
+  getSubscriptionById,
+  updateSubscription,
+} from '../services/subscriptionService.js';
+import {
+  getAllPayments,
+  getPaymentById,
+  getPaymentStats,
+} from '../services/paymentService.js';
+import {
+  checkIn,
+  checkOut,
+  getAllAttendance,
+  getTodayAttendance,
+} from '../services/attendanceService.js';
+import { getApiHealth } from '../services/systemService.js';
 import './AdminDashboard.css';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [activeSection, setActiveSection] = useState('overview');
+  const [apiOnline, setApiOnline] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    getApiHealth()
+      .then((health) => {
+        if (active) setApiOnline(health?.status === 'ok');
+      })
+      .catch(() => {
+        if (active) setApiOnline(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const stats = adminDashboardData.stats;
 
@@ -199,9 +238,11 @@ export default function AdminDashboard() {
 
           <div className="admin-dashboard__footer">
             <div className="admin-dashboard__system-status">
-              <Icon name="check_circle" size={16} />
+              <Icon name={apiOnline ? 'check_circle' : 'error'} size={16} />
               <span className="text-sm">SYSTEM STATUS</span>
-              <span className="admin-dashboard__status-indicator success">ONLINE</span>
+              <span className={`admin-dashboard__status-indicator ${apiOnline ? 'success' : ''}`}>
+                {apiOnline === null ? 'CHECKING' : apiOnline ? 'ONLINE' : 'OFFLINE'}
+              </span>
             </div>
             <p className="text-xs text-muted">All services operational • v3.4.2</p>
           </div>
@@ -364,17 +405,27 @@ function OverviewSection({ stats }) {
 // Members Section
 function MembersSection() {
   const [members, setMembers] = useState([]);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadMembers();
   }, []);
 
-  function loadMembers() {
-    const allMembers = getMembers();
-    setMembers(allMembers);
+  async function loadMembers() {
+    setLoading(true);
+    setError('');
+
+    try {
+      const result = await getAllMembers({ page: 1, limit: 100 });
+      setMembers(result.members || []);
+    } catch (err) {
+      setError(err.message || 'Unable to load members.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleDelete(memberId) {
@@ -383,20 +434,19 @@ function MembersSection() {
     }
 
     try {
-      await deleteUser(memberId);
-      loadMembers();
+      await deleteMember(memberId);
+      await loadMembers();
     } catch (err) {
       alert('Error deleting member: ' + err.message);
     }
   }
 
   async function handleSuspend(memberId) {
-    const reason = prompt('Reason for suspension:');
-    if (reason === null) return;
+    if (!confirm('Suspend this member?')) return;
 
     try {
-      await suspendUser(memberId, reason);
-      loadMembers();
+      await updateMember(memberId, { status: 'suspended' });
+      await loadMembers();
     } catch (err) {
       alert('Error suspending member: ' + err.message);
     }
@@ -404,22 +454,17 @@ function MembersSection() {
 
   async function handleActivate(memberId) {
     try {
-      await activateUser(memberId);
-      loadMembers();
+      await updateMember(memberId, { status: 'active' });
+      await loadMembers();
     } catch (err) {
       alert('Error activating member: ' + err.message);
     }
   }
 
-  function handleAddSuccess(newMember) {
-    setShowAddModal(false);
-    loadMembers();
-    alert(`Member ${newMember.fullName} added successfully!`);
-  }
-
   const filteredMembers = members.filter(member => {
-    const matchesSearch = member.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         member.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      (member.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (member.email || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || member.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -438,12 +483,10 @@ function MembersSection() {
               Directory View
             </Button>
           </Link>
-          <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
-            <Icon name="person_add" />
-            Add Member
-          </Button>
         </div>
       </header>
+
+      {error && <div className="admin-form__alert admin-form__alert--error" role="alert">{error}</div>}
 
       {/* Filters */}
       <div className="admin-filters">
@@ -482,7 +525,9 @@ function MembersSection() {
             </tr>
           </thead>
           <tbody>
-            {filteredMembers.length === 0 ? (
+            {loading ? (
+              <tr><td colSpan="6" className="admin-table__empty">Loading members…</td></tr>
+            ) : filteredMembers.length === 0 ? (
               <tr>
                 <td colSpan="6" className="admin-table__empty">
                   <Icon name="search_off" size={32} />
@@ -513,6 +558,23 @@ function MembersSection() {
                   <td>{new Date(member.createdAt).toLocaleDateString()}</td>
                   <td>
                     <div className="admin-table__actions">
+                      <button
+                        onClick={async () => {
+                          try {
+                            const result = await getMemberById(member.id);
+                            const details = result.member;
+                            window.alert(
+                              `${details.fullName}\n${details.email}\nPhone: ${details.phone || '—'}\nSubscription: ${result.subscription?.plan_name || 'None'}`
+                            );
+                          } catch (err) {
+                            alert('Error loading member: ' + err.message);
+                          }
+                        }}
+                        className="admin-action-btn"
+                        title="View member details"
+                      >
+                        <Icon name="visibility" size={18} />
+                      </button>
                       {member.status === 'active' ? (
                         <button
                           onClick={() => handleSuspend(member.id)}
@@ -546,18 +608,6 @@ function MembersSection() {
         </table>
       </div>
 
-      {/* Add Member Modal */}
-      {showAddModal && (
-        <Modal
-          title="Add New Member"
-          onClose={() => setShowAddModal(false)}
-        >
-          <AddMemberForm
-            onSuccess={handleAddSuccess}
-            onCancel={() => setShowAddModal(false)}
-          />
-        </Modal>
-      )}
     </div>
   );
 }
@@ -955,17 +1005,43 @@ function UsersSection() {
 }
 
 // Plans Section
+function normalizeAdminPlan(plan) {
+  return {
+    ...plan,
+    tier: plan.tier || plan.access_level || plan.accessLevel || 'Membership',
+    accessLevel: plan.accessLevel || plan.access_level || 'basic',
+    features: Array.isArray(plan.features) ? plan.features : [],
+    personalTraining:
+      plan.personalTraining ??
+      plan.includes_personal_training ??
+      plan.includesPersonalTraining ??
+      false,
+    isActive: plan.isActive ?? plan.is_active ?? false,
+  };
+}
+
 function PlansSection() {
   const [plans, setPlans] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadPlans();
   }, []);
 
-  function loadPlans() {
-    const allPlans = getAllPlans();
-    setPlans(allPlans);
+  async function loadPlans() {
+    setLoading(true);
+    setError('');
+
+    try {
+      const allPlans = await getAllPlans(false);
+      setPlans(allPlans.map(normalizeAdminPlan));
+    } catch (err) {
+      setError(err.message || 'Unable to load plans.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleDelete(planId) {
@@ -975,7 +1051,7 @@ function PlansSection() {
 
     try {
       await deletePlan(planId);
-      loadPlans();
+      await loadPlans();
     } catch (err) {
       alert('Error deleting plan: ' + err.message);
     }
@@ -983,12 +1059,8 @@ function PlansSection() {
 
   async function handleToggleStatus(planId, currentStatus) {
     try {
-      if (currentStatus) {
-        await deactivatePlan(planId);
-      } else {
-        await activatePlan(planId);
-      }
-      loadPlans();
+      await updatePlan(planId, { isActive: !currentStatus });
+      await loadPlans();
     } catch (err) {
       alert('Error updating plan: ' + err.message);
     }
@@ -997,7 +1069,7 @@ function PlansSection() {
   function handleAddSuccess(newPlan) {
     setShowAddModal(false);
     loadPlans();
-    alert(`Plan "${newPlan.name}" created successfully!`);
+    if (newPlan?.name) alert(`Plan "${newPlan.name}" created successfully!`);
   }
 
   return (
@@ -1014,6 +1086,8 @@ function PlansSection() {
           </Button>
         </div>
       </header>
+
+      {error && <div className="admin-form__alert admin-form__alert--error" role="alert">{error}</div>}
 
       {/* Plans Grid */}
       <div className="admin-plans-grid">
@@ -1077,7 +1151,7 @@ function PlansSection() {
           </div>
         ))}
 
-        {plans.length === 0 && (
+        {!loading && plans.length === 0 && !error && (
           <div className="admin-empty-state">
             <Icon name="card_membership" size={48} />
             <h3>No plans yet</h3>
@@ -1088,6 +1162,7 @@ function PlansSection() {
             </Button>
           </div>
         )}
+        {loading && <p role="status">Loading plans…</p>}
       </div>
 
       {/* Add Plan Modal */}
@@ -1108,6 +1183,70 @@ function PlansSection() {
 
 // Subscriptions Section
 function SubscriptionsSection() {
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [expiring, setExpiring] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+
+  async function loadSubscriptions() {
+    setLoading(true);
+    setError('');
+
+    try {
+      const [allResult, expiringResult] = await Promise.all([
+        getAllSubscriptions({ page: 1, limit: 50 }),
+        getExpiringSubscriptions(7),
+      ]);
+      setSubscriptions(allResult.subscriptions || []);
+      setExpiring(expiringResult.subscriptions || []);
+    } catch (err) {
+      setError(err.message || 'Unable to load subscriptions.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadSubscriptions();
+  }, []);
+
+  async function handleCancel(subscriptionId) {
+    if (!confirm('Cancel this subscription?')) return;
+
+    setActionError('');
+    try {
+      await cancelSubscription(subscriptionId, 'Cancelled by administrator');
+      await loadSubscriptions();
+    } catch (err) {
+      setActionError(err.message || 'Unable to cancel subscription.');
+    }
+  }
+
+  async function handleToggleRenewal(subscription) {
+    setActionError('');
+    try {
+      await updateSubscription(subscription.id, {
+        autoRenew: !subscription.auto_renew,
+      });
+      await loadSubscriptions();
+    } catch (err) {
+      setActionError(err.message || 'Unable to update auto-renewal.');
+    }
+  }
+
+  async function handleView(subscriptionId) {
+    setActionError('');
+    try {
+      const subscription = await getSubscriptionById(subscriptionId);
+      window.alert(
+        `${subscription.full_name || 'Member'} — ${subscription.plan_name || 'Plan'} — ${subscription.status}`
+      );
+    } catch (err) {
+      setActionError(err.message || 'Unable to load subscription details.');
+    }
+  }
+
   return (
     <div className="admin-section">
       <header className="admin-section__header">
@@ -1116,17 +1255,74 @@ function SubscriptionsSection() {
           <p className="text-muted">Monitor and manage all active subscriptions</p>
         </div>
         <div className="admin-section__actions">
-          <Button variant="outline" size="sm">
-            <Icon name="filter_list" />
-            Filter
+          <Button variant="outline" size="sm" onClick={loadSubscriptions} disabled={loading}>
+            <Icon name="refresh" />
+            Refresh
           </Button>
         </div>
       </header>
 
-      <div className="admin-placeholder">
-        <Icon name="autorenew" size={48} />
-        <h3>Subscription Dashboard</h3>
-        <p>Track renewals, cancellations, and subscription lifecycle management.</p>
+      {(error || actionError) && (
+        <div className="admin-form__alert admin-form__alert--error" role="alert">
+          {error || actionError}
+        </div>
+      )}
+
+      <h2 className="admin-section__subtitle">Expiring in the next 7 days ({expiring.length})</h2>
+      <div className="admin-table-container">
+        <table className="admin-table">
+          <thead><tr><th>Member</th><th>Plan</th><th>Expires</th></tr></thead>
+          <tbody>
+            {expiring.length === 0 ? (
+              <tr><td colSpan="3" className="admin-table__empty">No subscriptions expiring soon</td></tr>
+            ) : expiring.map((subscription) => (
+              <tr key={subscription.id}>
+                <td>{subscription.full_name} ({subscription.email})</td>
+                <td>{subscription.plan_name}</td>
+                <td>{subscription.end_date ? new Date(subscription.end_date).toLocaleDateString() : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h2 className="admin-section__subtitle">All subscriptions</h2>
+      <div className="admin-table-container">
+        <table className="admin-table">
+          <thead><tr><th>Member</th><th>Plan</th><th>Status</th><th>Start</th><th>End</th><th>Actions</th></tr></thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="6" className="admin-table__empty">Loading subscriptions…</td></tr>
+            ) : subscriptions.length === 0 ? (
+              <tr><td colSpan="6" className="admin-table__empty">No subscriptions found</td></tr>
+            ) : subscriptions.map((subscription) => (
+              <tr key={subscription.id}>
+                <td>{subscription.full_name}<br /><span className="text-xs text-muted">{subscription.email}</span></td>
+                <td>{subscription.plan_name}</td>
+                <td><span className={`admin-badge admin-badge--${subscription.status}`}>{subscription.status}</span></td>
+                <td>{subscription.start_date ? new Date(subscription.start_date).toLocaleDateString() : '—'}</td>
+                <td>{subscription.end_date ? new Date(subscription.end_date).toLocaleDateString() : '—'}</td>
+                <td>
+                  <div className="admin-table__actions">
+                    <button onClick={() => handleView(subscription.id)} className="admin-action-btn" title="View details">
+                      <Icon name="visibility" size={18} />
+                    </button>
+                    {subscription.status === 'active' && (
+                      <>
+                        <button onClick={() => handleToggleRenewal(subscription)} className="admin-action-btn" title={subscription.auto_renew ? 'Disable auto-renewal' : 'Enable auto-renewal'}>
+                          <Icon name={subscription.auto_renew ? 'autorenew' : 'sync_disabled'} size={18} />
+                        </button>
+                        <button onClick={() => handleCancel(subscription.id)} className="admin-action-btn admin-action-btn--danger" title="Cancel">
+                          <Icon name="cancel" size={18} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -1134,6 +1330,43 @@ function SubscriptionsSection() {
 
 // Payments Section
 function PaymentsSection() {
+  const [payments, setPayments] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedPayment, setSelectedPayment] = useState(null);
+
+  async function loadPayments() {
+    setLoading(true);
+    setError('');
+
+    try {
+      const [paymentsResult, statsResult] = await Promise.all([
+        getAllPayments({ page: 1, limit: 50 }),
+        getPaymentStats(),
+      ]);
+      setPayments(paymentsResult.payments || []);
+      setStats(statsResult.overall || null);
+    } catch (err) {
+      setError(err.message || 'Unable to load payments.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadPayments();
+  }, []);
+
+  async function handleViewPayment(paymentId) {
+    setError('');
+    try {
+      setSelectedPayment(await getPaymentById(paymentId));
+    } catch (err) {
+      setError(err.message || 'Unable to load payment details.');
+    }
+  }
+
   return (
     <div className="admin-section">
       <header className="admin-section__header">
@@ -1142,17 +1375,51 @@ function PaymentsSection() {
           <p className="text-muted">Track transactions, invoices, and financial metrics</p>
         </div>
         <div className="admin-section__actions">
-          <Button variant="outline" size="sm">
-            <Icon name="download" />
-            Export Transactions
+          <Button variant="outline" size="sm" onClick={loadPayments} disabled={loading}>
+            <Icon name="refresh" />
+            Refresh
           </Button>
         </div>
       </header>
 
-      <div className="admin-placeholder">
-        <Icon name="payments" size={48} />
-        <h3>Payment Processing Center</h3>
-        <p>View payment history, process refunds, and generate financial reports.</p>
+      {error && <div className="admin-form__alert admin-form__alert--error" role="alert">{error}</div>}
+
+      {stats && (
+        <div className="admin-dashboard__stats">
+          <div className="admin-stat-card"><span>Total revenue</span><strong>{stats.total_revenue ?? 0}</strong></div>
+          <div className="admin-stat-card"><span>Transactions</span><strong>{stats.total_transactions ?? 0}</strong></div>
+          <div className="admin-stat-card"><span>Pending amount</span><strong>{stats.pending_amount ?? 0}</strong></div>
+        </div>
+      )}
+
+      {selectedPayment && (
+        <div className="admin-form__alert" role="status">
+          Payment {selectedPayment.invoice_number || selectedPayment.id}: {selectedPayment.status}, {selectedPayment.amount} {selectedPayment.currency}
+          <button type="button" onClick={() => setSelectedPayment(null)} aria-label="Close payment details"> ×</button>
+        </div>
+      )}
+
+      <div className="admin-table-container">
+        <table className="admin-table">
+          <thead><tr><th>Member</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Status</th><th>Date</th><th>Details</th></tr></thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="7" className="admin-table__empty">Loading payments…</td></tr>
+            ) : payments.length === 0 ? (
+              <tr><td colSpan="7" className="admin-table__empty">No payments found</td></tr>
+            ) : payments.map((payment) => (
+              <tr key={payment.id}>
+                <td>{payment.full_name}<br /><span className="text-xs text-muted">{payment.email}</span></td>
+                <td>{payment.invoice_number || '—'}</td>
+                <td>{payment.amount} {payment.currency}</td>
+                <td>{payment.payment_method || '—'}</td>
+                <td>{payment.status}</td>
+                <td>{payment.created_at ? new Date(payment.created_at).toLocaleDateString() : '—'}</td>
+                <td><button onClick={() => handleViewPayment(payment.id)} className="admin-action-btn" title="View details"><Icon name="visibility" size={18} /></button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -1160,6 +1427,64 @@ function PaymentsSection() {
 
 // Attendance Section
 function AttendanceSection() {
+  const [data, setData] = useState(null);
+  const [records, setRecords] = useState([]);
+  const [memberId, setMemberId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+
+  async function loadAttendance() {
+    setLoading(true);
+    setError('');
+
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const [todayData, history] = await Promise.all([
+        getTodayAttendance(),
+        getAllAttendance({ date: today, page: 1, limit: 100 }),
+      ]);
+      setData(todayData);
+      setRecords(history.attendance || []);
+    } catch (err) {
+      setError(err.message || "Unable to load today's attendance.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAttendance();
+  }, []);
+
+  async function handleCheckIn(event) {
+    event.preventDefault();
+    setActionLoading(true);
+    setError('');
+    try {
+      await checkIn(memberId.trim());
+      setMemberId('');
+      await loadAttendance();
+    } catch (err) {
+      setError(err.message || 'Check-in failed.');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleCheckOut(attendanceId) {
+    setActionLoading(true);
+    setError('');
+    try {
+      await checkOut(attendanceId);
+      await loadAttendance();
+    } catch (err) {
+      setError(err.message || 'Check-out failed.');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   return (
     <div className="admin-section">
       <header className="admin-section__header">
@@ -1167,12 +1492,50 @@ function AttendanceSection() {
           <h1 className="admin-section__title">Attendance & Check-ins</h1>
           <p className="text-muted">Monitor facility usage and member check-ins</p>
         </div>
+        <Button variant="outline" size="sm" onClick={loadAttendance} disabled={loading}>
+          <Icon name="refresh" /> Refresh
+        </Button>
       </header>
 
-      <div className="admin-placeholder">
-        <Icon name="door_front" size={48} />
-        <h3>Attendance Tracking System</h3>
-        <p>Real-time check-ins, attendance reports, and facility capacity monitoring.</p>
+      {error && <div className="admin-form__alert admin-form__alert--error" role="alert">{error}</div>}
+
+      <form className="admin-section__actions" onSubmit={handleCheckIn}>
+        <input
+          aria-label="Member ID"
+          placeholder="Member ID to check in"
+          value={memberId}
+          onChange={(event) => setMemberId(event.target.value)}
+          required
+        />
+        <Button type="submit" variant="primary" disabled={actionLoading}>
+          <Icon name="login" /> Check in
+        </Button>
+      </form>
+
+      <p className="admin-section__subtitle">
+        Currently in gym: {data?.currentlyInGym ?? '—'} · Total visits today: {data?.totalToday ?? '—'}
+      </p>
+
+      <div className="admin-table-container">
+        <table className="admin-table">
+          <thead><tr><th>Member</th><th>Email</th><th>Check in</th><th>Check out</th><th>Location</th><th>Action</th></tr></thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="6" className="admin-table__empty">Loading attendance…</td></tr>
+            ) : records.length === 0 ? (
+              <tr><td colSpan="6" className="admin-table__empty">No attendance records for today</td></tr>
+            ) : records.map((visit) => (
+              <tr key={visit.id}>
+                <td>{visit.full_name}</td>
+                <td>{visit.email}</td>
+                <td>{visit.check_in_time ? new Date(visit.check_in_time).toLocaleTimeString() : '—'}</td>
+                <td>{visit.check_out_time ? new Date(visit.check_out_time).toLocaleTimeString() : '—'}</td>
+                <td>{visit.location || '—'}</td>
+                <td>{!visit.check_out_time && <Button size="sm" variant="outline" disabled={actionLoading} onClick={() => handleCheckOut(visit.id)}>Check out</Button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
