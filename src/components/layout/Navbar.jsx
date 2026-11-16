@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import Button from '../ui/Button.jsx';
 import Icon from '../ui/Icon.jsx';
 import Logo from './Logo.jsx';
@@ -10,14 +10,7 @@ import UserMenu from './useMenu.jsx';
 export default function Navbar() {
 
   const [open, setOpen] = useState(false);
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-
-  function handleLogout() {
-    logout();
-    setOpen(false);
-    navigate('/');
-  }
+  const { user } = useAuth();
 
   // The buttons change depending on whether someone is logged in.
   const authButtons = user ? (

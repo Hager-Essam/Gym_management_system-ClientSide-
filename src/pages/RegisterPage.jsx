@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AuthLayout from '../components/auth/AuthLayout.jsx';
 import CheckboxField from '../components/auth/CheckboxField.jsx';
@@ -6,17 +6,24 @@ import FormAlert from '../components/auth/FormAlert.jsx';
 import FormField from '../components/auth/FormField.jsx';
 import Button from '../components/ui/Button.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import { plans } from '../data/landing.js';
+import { getActivePlans } from '../services/planService.js';
 import { validateRegister } from '../utils/validators.js';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  // The pricing cards link to /register?plan=2 – read that "query string" here.
+  // Pricing cards link here as /register?plan=<plan uuid>. Keep that selection
+  // so the new member can continue to checkout after creating the account.
   const [searchParams] = useSearchParams();
-  const planFromUrl = searchParams.get('plan');
-  const initialPlan = plans.some((plan) => String(plan.id) === planFromUrl) ? planFromUrl : '';
+  const planFromUrl = searchParams.get('plan') || '';
+  const initialPlan = UUID_PATTERN.test(planFromUrl) ? planFromUrl : '';
+
+  const [plans, setPlans] = useState([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [plansError, setPlansError] = useState('');
 
   const [values, setValues] = useState({
     fullName: '',
@@ -29,6 +36,45 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadPlans() {
+      try {
+        const data = await getActivePlans();
+
+        if (!active) return;
+
+        const nextPlans = Array.isArray(data) ? data : [];
+        setPlans(nextPlans);
+
+        // Drop a plan id that is no longer offered.
+        if (
+          values.planId &&
+          nextPlans.length > 0 &&
+          !nextPlans.some((plan) => String(plan.id) === values.planId)
+        ) {
+          setValues((current) => ({ ...current, planId: '' }));
+        }
+      } catch (error) {
+        if (active) {
+          setPlansError(
+            error.message || 'Membership plans are temporarily unavailable.'
+          );
+        }
+      } finally {
+        if (active) setPlansLoading(false);
+      }
+    }
+
+    loadPlans();
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleChange(event) {
     const { name, value, type, checked } = event.target;
@@ -47,9 +93,23 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
+
     try {
-      await register(values);
-      navigate('/dashboard', { replace: true });
+      // The backend assigns the member role. Never send it from the client.
+      // We also do not send planId here: registration would create a pending
+      // subscription, and the checkout page creates the real one. Sending both
+      // would leave the member with a duplicate pending record.
+      await register({
+        fullName: values.fullName,
+        email: values.email,
+        password: values.password,
+      });
+
+      const target = UUID_PATTERN.test(values.planId)
+        ? `/subscribe/${values.planId}`
+        : '/dashboard';
+
+      navigate(target, { replace: true });
     } catch (error) {
       setSubmitError(error.message);
       setLoading(false);
@@ -60,7 +120,14 @@ export default function RegisterPage() {
     <AuthLayout
       title="Create your account"
       subtitle="Join IronForge and claim your complimentary 7-day access pass."
-      footer={<>Already a member? <Link to="/login">Sign in</Link></>}
+      footer={
+        <>
+          Already a member?{' '}
+          <Link to={`/login${values.planId ? `?plan=${values.planId}` : ''}`}>
+            Sign in
+          </Link>
+        </>
+      }
     >
       <form className="auth-form" onSubmit={handleSubmit} noValidate>
         <FormAlert>{submitError}</FormAlert>
@@ -93,17 +160,26 @@ export default function RegisterPage() {
           id="planId"
           name="planId"
           label="Membership plan"
-          hint="You can change this any time."
+          hint="You can confirm the price and payment method on the next step."
           value={values.planId}
           onChange={handleChange}
+          disabled={plansLoading}
         >
-          <option value="">I'll choose later</option>
+          <option value="">
+            {plansLoading ? 'Loading plans…' : "I'll choose later"}
+          </option>
           {plans.map((plan) => (
             <option key={plan.id} value={plan.id}>
-              {plan.name} – ${plan.price}/month
+              {plan.name} – ${Number(plan.price).toFixed(0)}/{plan.duration}
             </option>
           ))}
         </FormField>
+
+        {plansError && (
+          <p className="field__hint" role="status">
+            {plansError} You can still create an account and pick a plan later.
+          </p>
+        )}
 
         <div className="auth-form__two">
           <FormField
@@ -113,7 +189,7 @@ export default function RegisterPage() {
             label="Password"
             placeholder="8+ characters"
             autoComplete="new-password"
-            hint="Letters and numbers."
+            hint="At least 8 characters with a letter and a number."
             value={values.password}
             onChange={handleChange}
             error={errors.password}

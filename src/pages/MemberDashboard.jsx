@@ -1,282 +1,738 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import Icon from '../components/ui/Icon.jsx';
+
 import Button from '../components/ui/Button.jsx';
 import DashboardNav from '../components/layout/DashboardNav.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
+import Icon from '../components/ui/Icon.jsx';
+import { useMemberProfile } from '../context/MemberProfileContext.jsx';
 import {
-  memberStats,
-  dailyProtocol,
-  weeklyActivity,
-  upcomingClasses,
-  billingReceipts,
-  bodyComposition,
-  memberAccessPass,
-} from '../data/dashboardData.js';
-import { plans } from '../data/landing.js';
+  getMemberAttendance,
+  getMemberSubscriptions,
+} from '../services/memberService.js';
+import {
+  formatDuration,
+  formatVisitDay,
+  formatVisitTime,
+  getMonthLabel,
+  getMonthStartDate,
+  getVisitDurationMinutes,
+  isVisitOpen,
+} from '../utils/attendanceFormat.js';
+import { getProfileCompletion } from '../utils/profileCompletion.js';
+import {
+  deriveSubscriptionState,
+  formatPaymentMethod,
+  formatSubscriptionDate,
+  formatSubscriptionDuration,
+  formatSubscriptionMoney,
+  getDaysRemaining,
+  getSubscriptionDaysMessage,
+  getSubscriptionPlanId,
+  pickCurrentSubscription,
+} from '../utils/subscriptionFormat.js';
+
 import './MemberDashboard.css';
 
+const VISITS_PER_PAGE = 8;
+
+// Everything below comes from real member endpoints:
+//   GET /api/members/me
+//   GET /api/members/:id/subscription
+//   GET /api/members/:id/attendance
 export default function MemberDashboard() {
-  const { user } = useAuth();
-  const plan = plans.find((p) => String(p.id) === String(user.planId));
-  const firstName = user.fullName.split(' ')[0];
+  const {
+    member,
+    subscription,
+    loading,
+    error,
+    refreshProfile,
+  } = useMemberProfile();
+
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [visits, setVisits] = useState([]);
+  const [visitPagination, setVisitPagination] = useState(null);
+  const [monthVisits, setMonthVisits] = useState(null);
+
+  const [dataLoading, setDataLoading] = useState(true);
+  const [visitError, setVisitError] = useState('');
+  const [monthError, setMonthError] = useState('');
+  const [membershipError, setMembershipError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
+
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState('');
+
+  useEffect(() => {
+    if (!member?.id) return undefined;
+
+    let active = true;
+    const monthStart = getMonthStartDate();
+
+    setDataLoading(true);
+    setVisitError('');
+    setMonthError('');
+    setMembershipError('');
+
+    Promise.allSettled([
+      getMemberAttendance(member.id, { page: 1, limit: VISITS_PER_PAGE }),
+      getMemberSubscriptions(member.id),
+      getMemberAttendance(member.id, { startDate: monthStart, limit: 1 }),
+    ])
+      .then(([visitsResult, subscriptionsResult, monthResult]) => {
+        if (!active) return;
+
+        if (visitsResult.status === 'fulfilled') {
+          setVisits(visitsResult.value?.attendance || []);
+          setVisitPagination(visitsResult.value?.pagination || null);
+        } else {
+          setVisits([]);
+          setVisitPagination(null);
+          setVisitError(
+            visitsResult.reason?.message || 'Unable to load your check-ins.'
+          );
+        }
+
+        if (subscriptionsResult.status === 'fulfilled') {
+          setSubscriptions(
+            Array.isArray(subscriptionsResult.value)
+              ? subscriptionsResult.value
+              : []
+          );
+        } else {
+          setSubscriptions([]);
+          setMembershipError(
+            subscriptionsResult.reason?.message ||
+              'Unable to load your membership history.'
+          );
+        }
+
+        if (monthResult.status === 'fulfilled') {
+          setMonthVisits(monthResult.value?.pagination?.totalRecords ?? 0);
+        } else {
+          setMonthVisits(null);
+          setMonthError(
+            monthResult.reason?.message ||
+              'Unable to load this month’s check-ins.'
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setDataLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [member?.id, reloadToken]);
+
+  // Any new page of data invalidates the old "load more" error.
+  useEffect(() => {
+    setMoreError('');
+  }, [member?.id, reloadToken]);
+
+  function retry() {
+    setReloadToken((token) => token + 1);
+    refreshProfile().catch(() => {});
+  }
+
+  async function loadMoreVisits() {
+    if (!member?.id || !visitPagination) return;
+
+    const nextPage = (visitPagination.currentPage || 1) + 1;
+
+    setLoadingMore(true);
+    setMoreError('');
+
+    try {
+      const data = await getMemberAttendance(member.id, {
+        page: nextPage,
+        limit: VISITS_PER_PAGE,
+      });
+
+      const nextRows = data?.attendance || [];
+
+      setVisits((current) => {
+        const seen = new Set(current.map((visit) => visit.id));
+        return [
+          ...current,
+          ...nextRows.filter((visit) => !seen.has(visit.id)),
+        ];
+      });
+      setVisitPagination(data?.pagination || visitPagination);
+    } catch (err) {
+      setMoreError(err.message || 'Unable to load older visits.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="member-dash">
+        <DashboardNav />
+
+        <main
+          className="container member-dash__page-state"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="member-dash__spinner" aria-hidden="true" />
+          <p>Loading your dashboard…</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (error || !member) {
+    return (
+      <div className="member-dash">
+        <DashboardNav />
+
+        <main className="container member-dash__page-state">
+          <div className="card member-dash__page-error" role="alert">
+            <Icon name="error" size={32} />
+            <h1>We couldn't load your dashboard</h1>
+            <p>{error || 'Your member profile is unavailable right now.'}</p>
+
+            <div className="member-dash__page-error-actions">
+              <Button type="button" variant="outline" onClick={retry}>
+                Try again
+              </Button>
+              <Button to="/" variant="outline">
+                Back to home
+              </Button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  const fullName = member.fullName || 'Member';
+  const firstName = fullName.trim().split(' ')[0] || 'Member';
+  const email = member.email || 'Email not recorded';
+
+  const membership =
+    pickCurrentSubscription(subscriptions) || subscription || null;
+  const membershipState = deriveSubscriptionState(membership);
+  const membershipPlanId = getSubscriptionPlanId(membership);
+  const membershipDaysLeft = membership
+    ? getDaysRemaining(membership.end_date)
+    : null;
+
+  const membershipAmount = membership?.amount ?? membership?.price;
+  const membershipDuration =
+    membership?.duration || membership?.payment_frequency;
+
+  const completion = getProfileCompletion(member);
+  const lastVisit = visits[0] || null;
+  const totalVisits = visitPagination?.totalRecords ?? null;
+  const monthLabel = getMonthLabel();
+
+  const openVisit = visits.find((visit) => isVisitOpen(visit)) || null;
+  const hasMoreVisits = Boolean(
+    visitPagination &&
+      visitPagination.currentPage < visitPagination.totalPages
+  );
 
   return (
     <div className="member-dash">
       <DashboardNav />
-      
-      {/* Header Section */}
+
       <header className="member-dash__header">
-        <div className="container">
-          <div className="member-dash__header-top">
-            <div>
-              <p className="mono member-dash__terminal">
-                <Icon name="circle" size={8} className="dot-indicator" />
-                {memberAccessPass.membershipDetails.terminal}
-              </p>
-              <h1 className="member-dash__greeting">{memberAccessPass.membershipDetails.greeting}</h1>
-              <p className="member-dash__subtext">
-                {memberAccessPass.membershipDetails.session}
-              </p>
-            </div>
-            <Button variant="primary" size="lg" className="member-dash__launch-btn">
-              <Icon name="play_arrow" />
-              {memberAccessPass.launchButton}
-            </Button>
+        <div className="container member-dash__header-top">
+          <div>
+            <p className="mono member-dash__terminal">
+              <span className="member-dash__terminal-dot" aria-hidden="true" />
+              MEMBER OVERVIEW
+            </p>
+
+            <h1 className="member-dash__greeting">
+              Welcome back, {firstName}.
+            </h1>
+
+            <p className="member-dash__subtext">Signed in as {email}</p>
+
+            <p className="member-dash__subtext">
+              Member since {formatSubscriptionDate(member.createdAt)}
+            </p>
           </div>
+
+          <Button
+            to={membership ? '/member/subscription' : '/plans'}
+            variant="primary"
+            size="lg"
+            className="member-dash__launch-btn"
+          >
+            <Icon name="card_membership" size={18} />
+            {membership ? 'Manage membership' : 'Choose a plan'}
+          </Button>
         </div>
       </header>
 
-      {/* Main Content */}
       <div className="container">
         <div className="member-dash__content">
-          
-          {/* Top Row - Stats */}
-          <section className="member-dash__stats">
-            <div className="card member-dash__stat-card">
-              <p className="mono text-muted text-sm">ATTENDANCE STREAK</p>
-              <div className="member-dash__stat-value">
-                <span className="stat-number">{memberStats.attendanceStreak}</span>
-                <span className="stat-unit">DAYS FIRE</span>
-              </div>
-              <p className="text-muted text-xs">{memberStats.streakContext}</p>
-            </div>
+          {openVisit && (
+            <p className="member-dash__strip">
+              <Icon name="sensors" size={16} />
+              You are checked in right now — started{' '}
+              {formatVisitTime(openVisit.check_in_time)} at{' '}
+              {openVisit.location || 'the gym'}.
+            </p>
+          )}
 
-            <div className="card member-dash__stat-card">
-              <p className="mono text-muted text-sm">MONTHLY TONNAGE</p>
-              <div className="member-dash__stat-value">
-                <span className="stat-number">{memberStats.monthlyTonnage.toLocaleString()}</span>
-                <span className="stat-unit">KG</span>
-              </div>
-              <p className="text-accent text-xs">{memberStats.tonnageDelta} {memberStats.tonnagePrevious}</p>
-            </div>
+          <section className="member-dash__stats" aria-label="At a glance">
+            <article className="card member-dash__stat-card">
+              <p className="mono text-muted text-sm">TOTAL CHECK-INS</p>
 
-            <div className="card member-dash__stat-card">
-              <p className="mono text-muted text-sm">ASSIGNED COACH</p>
-              <div className="member-dash__coach-info">
-                <div className="member-dash__coach-avatar">
-                  <Icon name="person" />
+              {dataLoading ? (
+                <span className="member-dash__skeleton member-dash__skeleton--value" />
+              ) : (
+                <div className="member-dash__stat-value">
+                  <span className="stat-number">
+                    {visitError || totalVisits === null ? '—' : totalVisits}
+                  </span>
+                  <span className="stat-unit">visits</span>
                 </div>
-                <div>
-                  <p className="member-dash__coach-name">{memberStats.assignedCoach.name}</p>
-                  <p className="text-muted text-xs">{memberStats.assignedCoach.specialty}</p>
-                </div>
-              </div>
-              <span className="status-badge status-badge--success">{memberStats.assignedCoach.status}</span>
-            </div>
+              )}
 
-            <div className="card member-dash__stat-card">
-              <p className="mono text-muted text-sm">CURRENT WEIGHT / GOAL</p>
-              <div className="member-dash__stat-value">
-                <span className="stat-number">{memberStats.currentWeight}</span>
-                <span className="stat-unit">KG / {memberStats.goalWeight} KG</span>
+              <p className="member-dash__stat-note">
+                {visitError
+                  ? "Couldn't load your check-ins."
+                  : totalVisits === 0
+                  ? 'No visits recorded yet.'
+                  : 'Recorded at the front desk.'}
+              </p>
+            </article>
+
+            <article className="card member-dash__stat-card">
+              <p className="mono text-muted text-sm">
+                THIS MONTH · {monthLabel.toUpperCase()}
+              </p>
+
+              {dataLoading ? (
+                <span className="member-dash__skeleton member-dash__skeleton--value" />
+              ) : (
+                <div className="member-dash__stat-value">
+                  <span className="stat-number">
+                    {monthError || monthVisits === null ? '—' : monthVisits}
+                  </span>
+                  <span className="stat-unit">visits</span>
+                </div>
+              )}
+
+              <p className="member-dash__stat-note">
+                {monthError
+                  ? monthError
+                  : monthVisits === 0
+                  ? `No check-ins in ${monthLabel} yet.`
+                  : `${monthLabel} check-ins so far.`}
+              </p>
+            </article>
+
+            <article className="card member-dash__stat-card">
+              <p className="mono text-muted text-sm">LAST VISIT</p>
+
+              {dataLoading ? (
+                <span className="member-dash__skeleton member-dash__skeleton--value" />
+              ) : (
+                <p className="member-dash__stat-text">
+                  {lastVisit ? formatVisitDay(lastVisit.check_in_time) : '—'}
+                </p>
+              )}
+
+              <p className="member-dash__stat-note">
+                {visitError
+                  ? "Couldn't load your check-ins."
+                  : lastVisit
+                  ? `${formatVisitTime(lastVisit.check_in_time)} · ${
+                      lastVisit.location || 'Location not recorded'
+                    }`
+                  : 'No check-ins yet.'}
+              </p>
+            </article>
+
+            <article className="card member-dash__stat-card">
+              <div className="member-dash__stat-heading">
+                <p className="mono text-muted text-sm">PROFILE</p>
+
+                <Link to="/member/profile" className="member-dash__stat-link">
+                  Edit
+                </Link>
               </div>
-              <p className="text-accent text-xs">{memberStats.weightChange}</p>
-            </div>
+
+              <div className="member-dash__stat-value">
+                <span className="stat-number">{completion.percentage}</span>
+                <span className="stat-unit">% complete</span>
+              </div>
+
+              <div
+                className="member-dash__progress"
+                role="progressbar"
+                aria-label="Profile completion"
+                aria-valuenow={completion.percentage}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <span style={{ width: `${completion.percentage}%` }} />
+              </div>
+
+              <p className="member-dash__stat-note">
+                {completion.isComplete
+                  ? 'All profile details are filled in.'
+                  : `${completion.completed} of ${completion.total} details saved.`}
+              </p>
+            </article>
           </section>
 
-          {/* Main Two-Column Layout */}
           <div className="member-dash__main-grid">
-            
-            {/* Left Column */}
             <div className="member-dash__left-col">
-              
-              {/* Daily Protocol */}
               <section className="card member-dash__card">
                 <div className="member-dash__card-header">
                   <div>
-                    <p className="mono text-accent text-sm">{dailyProtocol.phase}</p>
-                    <h2 className="member-dash__card-title">{dailyProtocol.programName}</h2>
-                    <p className="text-muted text-sm">{dailyProtocol.duration}</p>
+                    <h2 className="member-dash__card-title">
+                      Recent check-ins
+                    </h2>
+
+                    <p className="text-muted text-sm">
+                      Your latest visits recorded by the gym.
+                    </p>
                   </div>
+
+                  {!dataLoading && !visitError && totalVisits !== null && (
+                    <span className="member-dash__count">
+                      {totalVisits} total
+                    </span>
+                  )}
                 </div>
 
-                <div className="member-dash__exercises">
-                  {dailyProtocol.exercises.map((exercise) => (
-                    <div key={exercise.id} className="member-dash__exercise">
-                      <div className="member-dash__exercise-header">
-                        <span className="member-dash__exercise-order mono">{exercise.order}</span>
-                        <div className="member-dash__exercise-info">
-                          <h3 className="member-dash__exercise-name">{exercise.name}</h3>
-                          <p className="text-muted text-xs">{exercise.specs}</p>
+                {dataLoading && (
+                  <div className="member-dash__visits" aria-hidden="true">
+                    {[0, 1, 2].map((row) => (
+                      <div className="member-dash__visit" key={row}>
+                        <div className="member-dash__visit-main">
+                          <span className="member-dash__skeleton member-dash__skeleton--line" />
+                          <span className="member-dash__skeleton member-dash__skeleton--short" />
+                        </div>
+                        <div className="member-dash__visit-side">
+                          <span className="member-dash__skeleton member-dash__skeleton--short" />
                         </div>
                       </div>
-                      <Button variant="outline" size="sm">
-                        <Icon name="check_circle" />
-                        {exercise.status}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
 
-                <Button variant="ghost" size="sm" fullWidth className="member-dash__log-custom">
-                  <Icon name="add" />
-                  {dailyProtocol.footer}
-                </Button>
+                {!dataLoading && visitError && (
+                  <div className="member-dash__inline-error" role="alert">
+                    <Icon name="error" size={20} />
+                    <p>{visitError}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={retry}
+                    >
+                      Try again
+                    </Button>
+                  </div>
+                )}
+
+                {!dataLoading && !visitError && visits.length === 0 && (
+                  <div className="member-dash__empty">
+                    <Icon name="event_busy" size={30} />
+                    <p>No check-ins yet.</p>
+                    <p className="text-muted text-sm">
+                      Your first visit appears here after the front desk records
+                      your entry.
+                    </p>
+                  </div>
+                )}
+
+                {!dataLoading && !visitError && visits.length > 0 && (
+                  <>
+                    <ul className="member-dash__visits">
+                      {visits.map((visit) => (
+                        <VisitRow key={visit.id} visit={visit} />
+                      ))}
+                    </ul>
+
+                    {moreError && (
+                      <p className="member-dash__inline-error-text" role="alert">
+                        {moreError}
+                      </p>
+                    )}
+
+                    {hasMoreVisits && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="member-dash__more"
+                        onClick={loadMoreVisits}
+                        disabled={loadingMore}
+                      >
+                        {loadingMore ? 'Loading…' : 'Show older visits'}
+                      </Button>
+                    )}
+                  </>
+                )}
               </section>
 
-              {/* Weekly Activity */}
               <section className="card member-dash__card">
-                <div className="member-dash__card-header">
+                <div className="member-dash__unavailable-head">
+                  <Icon name="lock_clock" size={24} />
+
                   <div>
-                    <h2 className="member-dash__card-title">{weeklyActivity.title}</h2>
-                    <p className="text-muted text-sm">{weeklyActivity.subtitle}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="mono text-sm">
-                      {weeklyActivity.completedSessions} / {weeklyActivity.totalSessions} Sessions
+                    <h2 className="member-dash__card-title">
+                      Not available in the portal yet
+                    </h2>
+
+                    <p className="text-muted text-sm">
+                      These areas need backend modules the gym API does not
+                      expose to member accounts yet.
                     </p>
                   </div>
                 </div>
 
-                <div className="member-dash__weekly-grid">
-                  {weeklyActivity.days.map((day, idx) => (
-                    <div key={idx} className={`member-dash__day ${day.completed ? 'member-dash__day--completed' : ''}`}>
-                      <p className="mono text-xs text-muted">{day.day}</p>
-                      <div className={`member-dash__day-indicator ${day.completed ? 'active' : ''}`}>
-                        {day.completed && <Icon name="check" size={16} />}
-                      </div>
-                      <p className="member-dash__day-time">{day.time}</p>
-                      <p className="text-muted text-xs">{day.checkIn}</p>
-                    </div>
-                  ))}
-                </div>
+                <ul className="member-dash__unavailable-list">
+                  <li>
+                    <Icon name="event" size={16} />
+                    Class schedules and bookings
+                  </li>
+                  <li>
+                    <Icon name="fitness_center" size={16} />
+                    Workout programs and set logging
+                  </li>
+                  <li>
+                    <Icon name="monitor_weight" size={16} />
+                    Body-composition scans
+                  </li>
+                  <li>
+                    <Icon name="receipt_long" size={16} />
+                    Invoices and receipts
+                  </li>
+                </ul>
               </section>
             </div>
 
-            {/* Right Column */}
             <div className="member-dash__right-col">
-              
-              {/* Membership Card */}
               <section className="card member-dash__card">
-                <div className="member-dash__card-header">
-                  <div>
-                    <p className="mono text-muted text-sm">{memberAccessPass.type}</p>
-                    <div className="member-dash__status">
-                      <span className="status-badge status-badge--active">{memberAccessPass.status.split(' ·')[0]}</span>
-                      <span className="text-muted text-sm">· {memberAccessPass.daysRemaining} DAYS LEFT</span>
-                    </div>
+                <div className="member-dash__card-header member-dash__card-header--tight">
+                  <p className="mono text-muted text-sm">MEMBERSHIP</p>
+
+                  {membership && !dataLoading && (
+                    <span
+                      className={`member-dash__badge member-dash__badge--${membershipState.tone}`}
+                    >
+                      {membershipState.label}
+                    </span>
+                  )}
+                </div>
+
+                {dataLoading && (
+                  <div className="member-dash__membership-loading" aria-hidden="true">
+                    <span className="member-dash__skeleton member-dash__skeleton--title" />
+                    <span className="member-dash__skeleton member-dash__skeleton--line" />
+                    <span className="member-dash__skeleton member-dash__skeleton--short" />
                   </div>
-                </div>
-                
-                <div className="member-dash__barcode">
-                  <div className="barcode-stripes">
-                    {[...Array(40)].map((_, i) => (
-                      <div key={i} className="barcode-stripe" style={{ width: `${Math.random() * 3 + 1}px` }} />
-                    ))}
+                )}
+
+                {!dataLoading && !membership && (
+                  <div className="member-dash__membership-empty">
+                    {membershipError ? (
+                      <>
+                        <p className="member-dash__inline-error-text" role="alert">
+                          {membershipError}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={retry}
+                        >
+                          Try again
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-muted text-sm">
+                          You don't have a membership yet. Pick a plan to start
+                          training.
+                        </p>
+                        <Button to="/plans" size="sm">
+                          Choose a plan
+                        </Button>
+                      </>
+                    )}
                   </div>
-                  <p className="mono barcode-number">{memberAccessPass.barcode}</p>
-                  <p className="mono text-muted text-xs">{memberAccessPass.nfcInfo}</p>
-                </div>
+                )}
 
-                <Button variant="outline" size="sm" fullWidth>
-                  <Icon name="wallet" />
-                  {memberAccessPass.admitButton}
-                </Button>
+                {!dataLoading && membership && (
+                  <>
+                    <h3 className="member-dash__plan">
+                      {membership.plan_name || 'Membership plan'}
+                    </h3>
 
-                <p className="text-muted text-xs member-dash__renewal">
-                  {memberAccessPass.renewalDate}
-                </p>
-              </section>
-
-              {/* Body Composition */}
-              <section className="card member-dash__card">
-                <div className="member-dash__card-header">
-                  <div>
-                    <h2 className="member-dash__card-title">{bodyComposition.title}</h2>
-                    <p className="text-muted text-sm">{bodyComposition.subtitle}</p>
-                  </div>
-                </div>
-
-                <div className="member-dash__metrics-grid">
-                  {bodyComposition.metrics.map((metric, idx) => (
-                    <div key={idx} className="member-dash__metric">
-                      <p className="mono text-muted text-xs">{metric.label}</p>
-                      <p className="member-dash__metric-value">{metric.value}</p>
-                      <p className="text-accent text-xs">{metric.sublabel}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="member-dash__weight-chart">
-                  <div className="member-dash__chart-line" style={{ width: '75%' }}></div>
-                </div>
-
-                <Button variant="primary" size="sm" fullWidth>
-                  <Icon name="analytics" />
-                  {bodyComposition.cta}
-                </Button>
-              </section>
-
-              {/* Upcoming Classes */}
-              <section className="card member-dash__card">
-                <div className="member-dash__card-header">
-                  <h2 className="member-dash__card-title">Upcoming Classes</h2>
-                  <Link to="#" className="text-accent text-sm">View All</Link>
-                </div>
-
-                <div className="member-dash__classes">
-                  {upcomingClasses.map((cls) => (
-                    <div key={cls.id} className={`member-dash__class ${!cls.date ? 'member-dash__class--add' : ''}`}>
-                      {cls.icon && <span className="member-dash__class-icon">{cls.icon}</span>}
-                      <div className="member-dash__class-info">
-                        <h3 className="member-dash__class-name">{cls.name}</h3>
-                        {cls.date && <p className="text-muted text-sm">{cls.date}</p>}
-                        {cls.location && <p className="text-muted text-xs">{cls.location}</p>}
-                      </div>
-                      {cls.status && (
-                        <span className={`status-badge ${cls.status === 'CONFIRMED' ? 'status-badge--success' : 'status-badge--info'}`}>
-                          {cls.status}
-                        </span>
+                    {membershipAmount !== undefined &&
+                      membershipAmount !== null && (
+                        <p className="member-dash__plan-price">
+                          {formatSubscriptionMoney(membershipAmount)}
+                          {membershipDuration && (
+                            <span>
+                              {' '}
+                              / {formatSubscriptionDuration(membershipDuration)}
+                            </span>
+                          )}
+                        </p>
                       )}
-                    </div>
-                  ))}
-                </div>
+
+                    <p className="member-dash__plan-dates">
+                      {formatSubscriptionDate(membership.start_date)} —{' '}
+                      {formatSubscriptionDate(membership.end_date)}
+                    </p>
+
+                    <p
+                      className={`member-dash__plan-state member-dash__plan-state--${membershipState.tone}`}
+                    >
+                      {getSubscriptionDaysMessage(
+                        membershipState.key,
+                        membershipDaysLeft
+                      )}
+                    </p>
+
+                    <dl className="member-dash__facts">
+                      <div>
+                        <dt>Next billing</dt>
+                        <dd>
+                          {membership.next_billing_date
+                            ? formatSubscriptionDate(
+                                membership.next_billing_date
+                              )
+                            : 'Not scheduled'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Auto-renew</dt>
+                        <dd>{membership.auto_renew ? 'On' : 'Off'}</dd>
+                      </div>
+                      <div>
+                        <dt>Payment</dt>
+                        <dd>
+                          {formatPaymentMethod(membership.payment_method)}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    {membershipError && (
+                      <p className="member-dash__inline-error-text" role="alert">
+                        {membershipError}
+                      </p>
+                    )}
+
+                    <Button
+                      to="/member/subscription"
+                      variant="outline"
+                      size="sm"
+                      className="btn--block member-dash__manage"
+                    >
+                      <Icon name="card_membership" size={16} />
+                      {membershipPlanId ? 'Manage membership' : 'View membership'}
+                    </Button>
+                  </>
+                )}
               </section>
 
-              {/* Billing */}
               <section className="card member-dash__card">
                 <div className="member-dash__card-header">
-                  <h2 className="member-dash__card-title">Billing & Receipts</h2>
-                  <Link to="#" className="text-accent text-sm">Settings</Link>
+                  <div>
+                    <h2 className="member-dash__card-title">Your profile</h2>
+
+                    <p className="text-muted text-sm">
+                      Keep your contact details up to date.
+                    </p>
+                  </div>
+
+                  <span className="member-dash__count">
+                    {completion.percentage}%
+                  </span>
                 </div>
 
-                {billingReceipts.map((receipt) => (
-                  <div key={receipt.id} className="member-dash__receipt">
-                    <div>
-                      <p className="member-dash__receipt-id mono">{receipt.id} <span className="text-accent">(${receipt.amount.toFixed(2)})</span></p>
-                      <p className="text-muted text-sm">{receipt.date}</p>
-                      <p className="text-muted text-xs">{receipt.nextBilling}</p>
-                    </div>
-                    <Button variant="outline" size="sm">
-                      <Icon name="download" />
-                    </Button>
-                  </div>
-                ))}
+                <div
+                  className="member-dash__progress"
+                  role="progressbar"
+                  aria-label="Profile completion"
+                  aria-valuenow={completion.percentage}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <span style={{ width: `${completion.percentage}%` }} />
+                </div>
+
+                <p className="text-muted text-sm member-dash__profile-copy">
+                  {completion.completed} of {completion.total} profile details
+                  are saved.
+                </p>
+
+                {!completion.isComplete && (
+                  <p className="member-dash__missing">
+                    Still missing: {completion.missing.join(', ')}.
+                  </p>
+                )}
+
+                <Button
+                  to="/member/profile"
+                  variant="outline"
+                  size="sm"
+                  className="btn--block member-dash__manage"
+                >
+                  <Icon name="person" size={16} />
+                  Edit profile
+                </Button>
               </section>
             </div>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function VisitRow({ visit }) {
+  const open = isVisitOpen(visit);
+  const minutes = getVisitDurationMinutes(visit);
+  const timeRange = visit.check_out_time
+    ? `${formatVisitTime(visit.check_in_time)} – ${formatVisitTime(
+        visit.check_out_time
+      )}`
+    : `${formatVisitTime(visit.check_in_time)} — still inside`;
+
+  return (
+    <li className="member-dash__visit">
+      <div className="member-dash__visit-main">
+        <p className="member-dash__visit-day">
+          {formatVisitDay(visit.check_in_time)}
+        </p>
+
+        <p className="text-muted text-xs">
+          {visit.location || 'Location not recorded'}
+        </p>
+      </div>
+
+      <div className="member-dash__visit-side">
+        <p className="member-dash__visit-time">{timeRange}</p>
+
+        <span
+          className={`member-dash__visit-tag ${
+            open ? 'member-dash__visit-tag--open' : ''
+          }`}
+        >
+          {open
+            ? 'In gym now'
+            : minutes === null
+            ? 'Visit recorded'
+            : formatDuration(minutes)}
+        </span>
+      </div>
+    </li>
   );
 }

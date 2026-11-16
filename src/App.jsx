@@ -12,8 +12,12 @@ import LoginPage from './pages/LoginPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
 import { useAuth } from './context/AuthContext.jsx';
-import { MemberProfileProvider } from './context/MemberProfileContext.jsx';
 import MemberProfilePage from './pages/MemberProfilePage.jsx';
+import MemberSubscriptionPage from './pages/MemberSubscriptionPage.jsx';
+import PlanDetailsPage from './pages/PlanDetailsPage.jsx';
+import PlansPage from './pages/PlansPage.jsx';
+import SubscribePage from './pages/SubscribePage.jsx';
+
 // Smart dashboard router that redirects based on user role
 function DashboardRouter() {
   const { user } = useAuth();
@@ -42,12 +46,14 @@ function DashboardRouter() {
 // The route table: which component shows for which URL.
 export default function App() {
   return (
-    <MemberProfileProvider>
+    <>
       <ScrollToHash />
 
       <Routes>
         {/* Public */}
         <Route path="/" element={<HomePage />} />
+        <Route path="/plans" element={<PlansPage />} />
+        <Route path="/plans/:planId" element={<PlanDetailsPage />} />
 
         {/* Only for logged-OUT visitors (logged-in users are redirected away) */}
         <Route element={<GuestRoute />}>
@@ -55,7 +61,7 @@ export default function App() {
           <Route path="/register" element={<RegisterPage />} />
         </Route>
 
-        {/* Only for logged-IN members (others are sent to /login) */}
+        {/* Only for logged-IN users */}
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardRouter />} />
           <Route path="/dashboard/member" element={<MemberDashboard />} />
@@ -64,17 +70,21 @@ export default function App() {
           <Route path="/dashboard/simple" element={<DashboardPage />} />
           {/* Operations pages */}
           <Route path="/operations/members" element={<MemberDirectoryPage />} />
+
+          {/* Member-only pages */}
+          <Route element={<ProtectedRoute roles={['member']} />}>
+            <Route path="/subscribe/:planId" element={<SubscribePage />} />
+            <Route path="/member/profile" element={<MemberProfilePage />} />
+            <Route
+              path="/member/subscription"
+              element={<MemberSubscriptionPage />}
+            />
+          </Route>
         </Route>
-        <Route path="/member/profile"  element={
-           
-              <MemberProfilePage />
-          
-          }
-        />
 
         {/* Anything else */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
-    </MemberProfileProvider>
+    </>
   );
 }

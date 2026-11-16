@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useMemberProfile } from '../context/MemberProfileContext.jsx';
 import Button from '../components/ui/Button.jsx';
+import DashboardNav from '../components/layout/DashboardNav.jsx';
+import {
+  getProfileCompletion,
+  validateProfileForm,
+} from '../utils/profileCompletion.js';
 import './MemberProfilePage.css';
 
 export default function MemberProfilePage() {
@@ -8,6 +13,7 @@ export default function MemberProfilePage() {
     member,
     subscription,
     loading,
+    error: loadError,
     updateProfile,
   } = useMemberProfile();
 
@@ -15,25 +21,33 @@ export default function MemberProfilePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const [form, setForm] = useState(null);
 
   function startEditing() {
     setForm({
-      full_name: member.fullName || '',
+      fullName: member.fullName || '',
       phone: member.phone || '',
       address: member.address || '',
-      date_of_birth: member.dateOfBirth
+      dateOfBirth: member.dateOfBirth
         ? member.dateOfBirth.slice(0, 10)
         : '',
       gender: member.gender || '',
-      emergency_contact: member.emergencyContact || '',
+      emergencyContact: member.emergencyContact || '',
       bio: member.bio || '',
     });
 
     setError('');
     setSuccess('');
+    setFieldErrors({});
     setIsEditing(true);
+  }
+
+  function cancelEditing() {
+    setIsEditing(false);
+    setFieldErrors({});
+    setError('');
   }
 
   function handleChange(event) {
@@ -43,19 +57,54 @@ export default function MemberProfilePage() {
       ...current,
       [name]: value,
     }));
+
+    // Clear a field's error as soon as the member edits it.
+    setFieldErrors((current) => {
+      if (!current[name]) return current;
+
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
 
+    const validationErrors = validateProfileForm(form);
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      setError('Please fix the highlighted fields before saving.');
+      setSuccess('');
+
+      const firstInvalid = Object.keys(validationErrors)[0];
+      document.querySelector(`[name="${firstInvalid}"]`)?.focus();
+      return;
+    }
+
     setSaving(true);
     setError('');
     setSuccess('');
 
+    // The backend validator rejects empty strings for phone, dateOfBirth and
+    // gender, so only send those when the member actually filled them in.
+    const payload = {
+      fullName: form.fullName.trim(),
+      address: form.address,
+      emergencyContact: form.emergencyContact,
+      bio: form.bio,
+    };
+
+    if (form.phone.trim()) payload.phone = form.phone.trim();
+    if (form.dateOfBirth) payload.dateOfBirth = form.dateOfBirth;
+    if (form.gender) payload.gender = form.gender;
+
     try {
-      await updateProfile(form);
+      await updateProfile(payload);
 
       setIsEditing(false);
+      setFieldErrors({});
       setSuccess('Your profile has been updated successfully.');
     } catch (err) {
       setError(err.message || 'Failed to update profile.');
@@ -65,11 +114,23 @@ export default function MemberProfilePage() {
   }
 
   if (loading) {
-    return <div className="profile-loading">Loading profile...</div>;
+    return (
+      <>
+        <DashboardNav />
+        <div className="profile-loading">Loading profile...</div>
+      </>
+    );
   }
 
   if (!member) {
-    return <div className="profile-loading">Unable to load your profile.</div>;
+    return (
+      <>
+        <DashboardNav />
+        <div className="profile-loading" role="alert">
+          {loadError || 'Unable to load your profile.'}
+        </div>
+      </>
+    );
   }
 
   const firstLetter = member.fullName?.trim()?.charAt(0).toUpperCase() || 'M';
@@ -78,9 +139,14 @@ export default function MemberProfilePage() {
     ? new Date(member.createdAt).toLocaleDateString()
     : 'Not available';
 
+  const completion = getProfileCompletion(member);
+
   return (
-    <main className="member-profile">
-      <div className="profile-container">
+    <>
+      <DashboardNav />
+
+      <main className="member-profile">
+        <div className="profile-container">
 
         <section className="profile-hero">
           <div className="profile-avatar">
@@ -115,6 +181,53 @@ export default function MemberProfilePage() {
           </div>
         )}
 
+        <section
+          className={`profile-card profile-completion ${
+            completion.isComplete ? 'profile-completion--done' : ''
+          }`}
+        >
+          <div className="profile-completion__head">
+            <div>
+              <span className="profile-eyebrow">PROFILE STRENGTH</span>
+              <h2>
+                {completion.isComplete
+                  ? 'Your profile is complete'
+                  : 'Finish your profile'}
+              </h2>
+            </div>
+
+            <span className="profile-completion__percent" aria-hidden="true">
+              {completion.percentage}%
+            </span>
+          </div>
+
+          <div
+            className="profile-completion__track"
+            role="progressbar"
+            aria-label="Profile completion"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={completion.percentage}
+          >
+            <span
+              className="profile-completion__fill"
+              style={{ width: `${completion.percentage}%` }}
+            />
+          </div>
+
+          <p className="profile-completion__hint">
+            {completion.isComplete
+              ? 'Everything the front desk needs is on file. You can update it any time.'
+              : `${completion.completed} of ${completion.total} details saved. Missing: ${completion.missing.join(', ')}.`}
+          </p>
+
+          {!completion.isComplete && !isEditing && (
+            <Button variant="outline" onClick={startEditing}>
+              Complete my profile
+            </Button>
+          )}
+        </section>
+
         <section className="profile-card">
           <div className="profile-card-heading">
             <div>
@@ -127,14 +240,31 @@ export default function MemberProfilePage() {
             <form onSubmit={handleSubmit}>
               <div className="profile-form-grid">
 
-                <label>
-                  Full Name
+                <label
+                  className={fieldErrors.fullName ? 'profile-field--error' : ''}
+                >
+                  Full Name{' '}
+                  <span className="profile-required" aria-hidden="true">*</span>
                   <input
-                    name="full_name"
-                    value={form.full_name}
+                    name="fullName"
+                    value={form.fullName}
                     onChange={handleChange}
                     required
+                    maxLength={150}
+                    aria-invalid={Boolean(fieldErrors.fullName)}
+                    aria-describedby={
+                      fieldErrors.fullName ? 'profile-fullName-error' : undefined
+                    }
                   />
+                  {fieldErrors.fullName && (
+                    <span
+                      className="profile-field-error"
+                      id="profile-fullName-error"
+                      role="alert"
+                    >
+                      {fieldErrors.fullName}
+                    </span>
+                  )}
                 </label>
 
                 <label>
@@ -142,50 +272,126 @@ export default function MemberProfilePage() {
                   <input value={member.email} disabled />
                 </label>
 
-                <label>
-                  Phone
+                <label
+                  className={fieldErrors.phone ? 'profile-field--error' : ''}
+                >
+                  Phone{' '}
+                  <span className="profile-required" aria-hidden="true">*</span>
                   <input
                     name="phone"
                     value={form.phone}
                     onChange={handleChange}
+                    maxLength={20}
+                    inputMode="tel"
+                    aria-invalid={Boolean(fieldErrors.phone)}
+                    aria-describedby={
+                      fieldErrors.phone ? 'profile-phone-error' : undefined
+                    }
                   />
+                  {fieldErrors.phone && (
+                    <span
+                      className="profile-field-error"
+                      id="profile-phone-error"
+                      role="alert"
+                    >
+                      {fieldErrors.phone}
+                    </span>
+                  )}
                 </label>
 
-                <label>
-                  Date of Birth
+                <label
+                  className={
+                    fieldErrors.dateOfBirth ? 'profile-field--error' : ''
+                  }
+                >
+                  Date of Birth{' '}
+                  <span className="profile-required" aria-hidden="true">*</span>
                   <input
                     type="date"
-                    name="date_of_birth"
-                    value={form.date_of_birth}
+                    name="dateOfBirth"
+                    value={form.dateOfBirth}
                     onChange={handleChange}
+                    aria-invalid={Boolean(fieldErrors.dateOfBirth)}
+                    aria-describedby={
+                      fieldErrors.dateOfBirth
+                        ? 'profile-dateOfBirth-error'
+                        : undefined
+                    }
                   />
+                  {fieldErrors.dateOfBirth && (
+                    <span
+                      className="profile-field-error"
+                      id="profile-dateOfBirth-error"
+                      role="alert"
+                    >
+                      {fieldErrors.dateOfBirth}
+                    </span>
+                  )}
                 </label>
 
-                <label>
-                  Gender
+                <label
+                  className={fieldErrors.gender ? 'profile-field--error' : ''}
+                >
+                  Gender{' '}
+                  <span className="profile-required" aria-hidden="true">*</span>
                   <select
                     name="gender"
                     value={form.gender}
                     onChange={handleChange}
+                    aria-invalid={Boolean(fieldErrors.gender)}
+                    aria-describedby={
+                      fieldErrors.gender ? 'profile-gender-error' : undefined
+                    }
                   >
                     <option value="">Select gender</option>
                     <option value="male">Male</option>
                     <option value="female">Female</option>
                     <option value="other">Other</option>
                   </select>
+                  {fieldErrors.gender && (
+                    <span
+                      className="profile-field-error"
+                      id="profile-gender-error"
+                      role="alert"
+                    >
+                      {fieldErrors.gender}
+                    </span>
+                  )}
                 </label>
 
-                <label>
-                  Emergency Contact
+                <label
+                  className={
+                    fieldErrors.emergencyContact ? 'profile-field--error' : ''
+                  }
+                >
+                  Emergency Contact{' '}
+                  <span className="profile-required" aria-hidden="true">*</span>
                   <input
-                    name="emergency_contact"
-                    value={form.emergency_contact}
+                    name="emergencyContact"
+                    value={form.emergencyContact}
                     onChange={handleChange}
+                    maxLength={150}
+                    aria-invalid={Boolean(fieldErrors.emergencyContact)}
+                    aria-describedby={
+                      fieldErrors.emergencyContact
+                        ? 'profile-emergencyContact-error'
+                        : undefined
+                    }
                   />
+                  {fieldErrors.emergencyContact && (
+                    <span
+                      className="profile-field-error"
+                      id="profile-emergencyContact-error"
+                      role="alert"
+                    >
+                      {fieldErrors.emergencyContact}
+                    </span>
+                  )}
                 </label>
 
                 <label className="profile-form-full">
-                  Address
+                  Address{' '}
+                  <span className="profile-required" aria-hidden="true">*</span>
                   <input
                     name="address"
                     value={form.address}
@@ -194,7 +400,7 @@ export default function MemberProfilePage() {
                 </label>
 
                 <label className="profile-form-full">
-                  Bio
+                  Bio (optional)
                   <textarea
                     name="bio"
                     value={form.bio}
@@ -210,7 +416,7 @@ export default function MemberProfilePage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsEditing(false)}
+                  onClick={cancelEditing}
                 >
                   Cancel
                 </Button>
@@ -269,8 +475,9 @@ export default function MemberProfilePage() {
           )}
         </section>
 
-      </div>
-    </main>
+        </div>
+      </main>
+    </>
   );
 }
 

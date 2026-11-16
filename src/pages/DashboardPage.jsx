@@ -1,22 +1,13 @@
 
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import Icon from '../components/ui/Icon.jsx';
-import Button from '../components/ui/Button.jsx';
 import Logo from '../components/layout/Logo.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
+import UserMenu from '../components/layout/useMenu.jsx';
 import { useMemberProfile } from '../context/MemberProfileContext.jsx';
 import './DashboardPage.css';
 
 export default function DashboardPage() {
-  const { logout } = useAuth();
   const { member, subscription, loading, error } = useMemberProfile();
-
-  const navigate = useNavigate();
-
-  function handleLogout() {
-    logout();
-    navigate('/', { replace: true });
-  }
 
   if (loading) {
     return (
@@ -47,10 +38,7 @@ export default function DashboardPage() {
           <Logo />
 
           <div className="dash__user">
-            <span className="dash__name">{fullName}</span>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              Log out
-            </Button>
+            <UserMenu />
           </div>
         </div>
       </header>

@@ -1,9 +1,22 @@
 
+import { Link } from 'react-router-dom';
+
 import Button from '../ui/Button.jsx';
 import Icon from '../ui/Icon.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import './PricingCard.css';
 
 export default function PricingCard({ plan }) {
+  const { user } = useAuth();
+  const isMember = user?.role === 'member';
+
+  // Logged-in members go straight to the subscription page for this plan.
+  // Visitors still sign up first; staff are sent to their dashboard.
+  const target = !user
+    ? `/register?plan=${plan.id}` : isMember ? `/subscribe/${plan.id}` : '/dashboard';
+
+  const cta = !user ? plan.cta : isMember ? 'Subscribe now' : 'Go to dashboard';
+
   return (
     <article className={`card plan ${plan.popular ? 'plan--popular' : ''}`}>
 
@@ -38,12 +51,17 @@ export default function PricingCard({ plan }) {
         ))}
       </ul>
 
+      <Link className="plan__details" to={`/plans/${plan.id}`}>
+        View full details
+        <Icon name="arrow_forward" size={14} />
+      </Link>
+
       <Button
-        to={`/register?plan=${plan.id}`}
+        to={target}
         variant={plan.popular ? 'primary' : 'outline'}
         className="btn--block"
       >
-        {plan.cta}
+        {cta}
       </Button>
 
     </article>

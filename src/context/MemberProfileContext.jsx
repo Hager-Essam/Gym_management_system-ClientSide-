@@ -21,7 +21,8 @@ function normalizeMember(member = {}) {
     dateOfBirth: member.dateOfBirth ?? member.date_of_birth ?? '',
     emergencyContact:
       member.emergencyContact ?? member.emergency_contact ?? '',
-    profilePicture: null,
+    profilePicture:
+      member.profilePicture ?? member.profile_picture_url ?? null,
   };
 }
 
@@ -31,21 +32,28 @@ export function MemberProfileProvider({ children }) {
   const [member, setMember] = useState(null);
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const refreshProfile = useCallback(async () => {
     if (!user) {
       setMember(null);
       setSubscription(null);
-      return;
+      setError('');
+      return null;
     }
 
     setLoading(true);
+    setError('');
 
     try {
       const data = await getMyProfile();
 
-      setMember(normalizeMember(data.user));
-      setSubscription(data.subscription ?? null);
+      setMember(normalizeMember(data?.user));
+      setSubscription(data?.subscription ?? null);
+      return data;
+    } catch (err) {
+      setError(err.message || 'Unable to load your profile.');
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -58,21 +66,26 @@ export function MemberProfileProvider({ children }) {
       if (!user) {
         setMember(null);
         setSubscription(null);
+        setError('');
         setLoading(false);
         return;
       }
 
       setLoading(true);
+      setError('');
 
       try {
         const data = await getMyProfile();
 
         if (active) {
-          setMember(normalizeMember(data.user));
-          setSubscription(data.subscription ?? null);
+          setMember(normalizeMember(data?.user));
+          setSubscription(data?.subscription ?? null);
         }
-      } catch (error) {
-        console.error('Profile loading error:', error);
+      } catch (err) {
+        if (active) {
+          console.error('Profile loading error:', err);
+          setError(err.message || 'Unable to load your profile.');
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -100,6 +113,7 @@ export function MemberProfileProvider({ children }) {
     member,
     subscription,
     loading,
+    error,
     refreshProfile,
     updateProfile,
   };

@@ -33,7 +33,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <AuthProvider>
         <MemberProfileProvider>
-
         <App />
         </MemberProfileProvider>
       </AuthProvider>

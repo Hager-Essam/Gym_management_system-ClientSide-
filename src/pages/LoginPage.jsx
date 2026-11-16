@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import AuthLayout from '../components/auth/AuthLayout.jsx';
 import CheckboxField from '../components/auth/CheckboxField.jsx';
 import FormAlert from '../components/auth/FormAlert.jsx';
@@ -9,13 +9,23 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { validateLogin } from '../utils/validators.js';
 import { seedDemoUsers } from '../utils/seedUsers.js';
 
-export default function LoginPage() {
-  const { login } = useAuth();
-  const navigate = useNavigate(); // lets us change page from code
-  const location = useLocation(); // info about the current URL (+ any `state` passed to us)
+function buildPath(location) {
+  if (!location?.pathname) return null;
+  return `${location.pathname}${location.search || ''}${location.hash || ''}`;
+}
 
-  // If ProtectedRoute sent us here, go back to the page the user originally wanted.
-  const redirectTo = location.state?.from?.pathname || '/dashboard';
+export default function LoginPage() {
+  const { login, authError } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  const planId = searchParams.get('plan');
+  const intendedPath = buildPath(location.state?.from);
+
+  // If ProtectedRoute sent us here, go back to the exact page (including
+  // ?query) the user originally wanted.
+  const redirectAfterLogin = intendedPath || (planId ? `/subscribe/${planId}` : '/dashboard');
 
   // One state object for all inputs ("controlled inputs": React owns the values).
   const [values, setValues] = useState({ email: '', password: '', remember: true });
@@ -42,8 +52,15 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      await login(values);
-      navigate(redirectTo, { replace: true });
+      const loggedIn = await login(values);
+
+      // Only members can continue to a plan checkout.
+      const target =
+        planId && loggedIn?.role === 'member'
+          ? `/subscribe/${planId}`
+          : redirectAfterLogin;
+
+      navigate(target, { replace: true });
     } catch (error) {
       setSubmitError(error.message);
       setLoading(false);
@@ -67,10 +84,17 @@ export default function LoginPage() {
     <AuthLayout
       title="Member portal login"
       subtitle="Sign in to manage your membership, book coaches, and view your telemetry."
-      footer={<>New to IronForge? <Link to="/register">Create an account</Link></>}
+      footer={
+        <>
+          New to IronForge?{' '}
+          <Link to={`/register${planId ? `?plan=${planId}` : ''}`}>
+            Create an account
+          </Link>
+        </>
+      }
     >
       <form className="auth-form" onSubmit={handleSubmit} noValidate>
-        <FormAlert>{submitError}</FormAlert>
+        <FormAlert>{submitError || authError}</FormAlert>
 
         {/* Development helper */}
         {import.meta.env.DEV && (

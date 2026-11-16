@@ -1,18 +1,12 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import Logo from './Logo.jsx';
-import Button from '../ui/Button.jsx';
 import Icon from '../ui/Icon.jsx';
+import UserMenu from './useMenu.jsx';
 import './DashboardNav.css';
 
 export default function DashboardNav() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-
-  function handleLogout() {
-    logout();
-    navigate('/', { replace: true });
-  }
+  const { user } = useAuth();
 
   const navItems = user?.role === 'coach' 
     ? [
@@ -30,18 +24,17 @@ export default function DashboardNav() {
       ]
     : [
         { label: 'Dashboard', href: '/dashboard', icon: 'dashboard' },
-        { label: 'My Workouts', href: '/dashboard/member#workouts', icon: 'fitness_center' },
-        { label: 'Progress', href: '/dashboard/member#progress', icon: 'trending_up' },
-        { label: 'Classes', href: '/dashboard/member#classes', icon: 'event' },
+        { label: 'Membership', href: '/member/subscription', icon: 'card_membership' },
+        { label: 'My profile', href: '/member/profile', icon: 'person' },
       ];
 
   return (
     <nav className="dash-nav">
       <div className="container dash-nav__inner">
         <div className="dash-nav__left">
-          <Link to="/" className="dash-nav__logo">
+          <div className="dash-nav__logo">
             <Logo />
-          </Link>
+          </div>
           
           <div className="dash-nav__links">
             {navItems.map((item) => (
@@ -54,25 +47,7 @@ export default function DashboardNav() {
         </div>
 
         <div className="dash-nav__right">
-          <div className="dash-nav__user">
-            <div className="dash-nav__user-avatar">
-              <Icon name="person" />
-            </div>
-            <div className="dash-nav__user-info">
-              <span className="dash-nav__user-name">{user?.fullName}</span>
-              <span className="dash-nav__user-role mono">
-                {user?.role === 'coach' ? 'COACH' : 
-                 user?.role === 'admin' ? 'ADMIN' :
-                 user?.role === 'manager' ? 'MANAGER' :
-                 'MEMBER'}
-              </span>
-            </div>
-          </div>
-          
-          <Button variant="outline" size="sm" onClick={handleLogout}>
-            <Icon name="logout" size={18} />
-            Log out
-          </Button>
+          <UserMenu />
         </div>
       </div>
     </nav>

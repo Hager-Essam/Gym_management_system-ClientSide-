@@ -25,3 +25,16 @@
 .plan__list li .material-symbols-outlined { margin-top: 2px; color: var(--accent); }
 .plan__list li.is-off { color: #4b5b5d; text-decoration: line-through; }
 .plan__list li.is-off .material-symbols-outlined { color: var(--border-strong); }
+.plan__details {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 14px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: color 0.2s ease;
+}
+.plan__details:hover { color: var(--accent); }

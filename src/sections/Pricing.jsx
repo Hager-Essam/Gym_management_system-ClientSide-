@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 
 import PricingCard from '../components/cards/PricingCard.jsx';
+import Button from '../components/ui/Button.jsx';
 import SectionHeading from '../components/ui/SectionHeading.jsx';
 
 import { pricingHeader } from '../data/landing.js';
@@ -48,11 +49,19 @@ export default function Pricing() {
         )}
 
         {!loading && !error && plans.length > 0 && (
-          <div className="pricing__grid">
-            {plans.map((plan) => (
-              <PricingCard key={plan.id} plan={plan} />
-            ))}
-          </div>
+          <>
+            <div className="pricing__grid">
+              {plans.map((plan) => (
+                <PricingCard key={plan.id} plan={plan} />
+              ))}
+            </div>
+
+            <div className="pricing__compare">
+              <Button to="/plans" variant="outline">
+                Compare all plans side by side
+              </Button>
+            </div>
+          </>
         )}
       </div>
     </section>

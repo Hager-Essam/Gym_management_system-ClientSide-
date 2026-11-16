@@ -170,6 +170,78 @@
   color: #20d99a;
 }
 
+/* Profile completion indicator */
+.profile-completion__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.profile-completion h2 {
+  margin: 8px 0 0;
+}
+
+.profile-completion__percent {
+  color: #20d99a;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.profile-completion__track {
+  height: 8px;
+  margin: 18px 0 14px;
+  border-radius: 999px;
+  background: #0b1110;
+  overflow: hidden;
+}
+
+.profile-completion__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #20d99a, #7af2b9);
+  transition: width 0.3s ease;
+}
+
+.profile-completion__hint {
+  margin: 0 0 18px;
+  color: #9ba9a3;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.profile-completion--done {
+  border-color: rgba(32, 217, 154, 0.35);
+}
+
+.profile-completion .btn {
+  align-self: flex-start;
+}
+
+/* Inline field validation */
+.profile-required {
+  color: #20d99a;
+  font-weight: 700;
+}
+
+.profile-field--error input,
+.profile-field--error select {
+  border-color: #ff7777;
+}
+
+.profile-field--error input:focus,
+.profile-field--error select:focus {
+  border-color: #ff7777;
+}
+
+.profile-field-error {
+  color: #ff8b8b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 @media (max-width: 650px) {
   .member-profile {
     padding: 32px 16px;

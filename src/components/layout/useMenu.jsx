@@ -1,24 +1,45 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import Icon from '../ui/Icon.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { useMemberProfile } from '../../context/MemberProfileContext.jsx';
-import './UserMenu.css';
+import { useMemberProfile } from '../../context/MemberProfileContext';
+import Icon from '../ui/Icon';
+import './userMenu.css';
 
-export default function UserMenu() {
+const ROLE_LABELS = {
+  admin: 'Administrator',
+  manager: 'Manager',
+  coach: 'Coach',
+  member: 'Member',
+};
+
+export default function UserMenu({ onLogout, className = '' }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
+  const { member, subscription } = useMemberProfile();
 
-  const { logout } = useAuth();
-  const { member, subscription, loading } = useMemberProfile();
+  const name =
+    member?.fullName ||
+    member?.full_name ||
+    user?.fullName ||
+    user?.name ||
+    user?.email ||
+    'Member';
 
-  const navigate = useNavigate();
+  const email = member?.email || user?.email || '';
+  const initial = name.trim().charAt(0).toUpperCase() || 'M';
+  const roleLabel = ROLE_LABELS[user?.role] || 'Member';
+  const isMember = !user?.role || user?.role === 'member';
 
-  const fullName = member?.fullName || 'Member';
-  const firstLetter = fullName.trim().charAt(0).toUpperCase() || 'M';
+  const membershipStatus =
+    subscription?.status ||
+    (Array.isArray(subscription)
+      ? subscription.find((item) => item.status === 'active')?.status
+      : null);
 
   useEffect(() => {
-    function handleClickOutside(event) {
+    function handleOutsideClick(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
         setIsOpen(false);
       }
@@ -28,90 +49,109 @@ export default function UserMenu() {
       if (event.key === 'Escape') setIsOpen(false);
     }
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handleOutsideClick);
     document.addEventListener('keydown', handleEscape);
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('mousedown', handleOutsideClick);
       document.removeEventListener('keydown', handleEscape);
     };
   }, []);
 
   function handleLogout() {
     setIsOpen(false);
+
+    if (onLogout) {
+      onLogout();
+      return;
+    }
+
     logout();
-    navigate('/');
+    navigate('/', { replace: true });
   }
 
+  // No signed-in user = nothing to show.
+  if (!user) return null;
+
   return (
-    <div className="user-menu" ref={menuRef}>
+    <div className={`user-menu ${className}`.trim()} ref={menuRef}>
       <button
         type="button"
         className="user-menu__trigger"
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => setIsOpen((previous) => !previous)}
         aria-expanded={isOpen}
+        aria-haspopup="menu"
         aria-label="Open account menu"
       >
-        <span className="user-menu__avatar">
-          {firstLetter}
-        </span>
+        <span className="user-menu__avatar">{initial}</span>
 
-        <span className="user-menu__name">
-          {loading ? 'Loading...' : fullName}
-        </span>
+        <span className="user-menu__trigger-name">{name}</span>
 
-        <Icon name="expand_more" size={18} />
+        <Icon
+          name={isOpen ? 'expand_less' : 'expand_more'}
+          size={18}
+          className="user-menu__chevron"
+        />
       </button>
 
       {isOpen && (
-        <div className="user-menu__dropdown">
-          <div className="user-menu__header">
+        <div className="user-menu__dropdown" role="menu">
+          <div className="user-menu__identity">
             <span className="user-menu__avatar user-menu__avatar--large">
-              {firstLetter}
+              {initial}
             </span>
 
-            <div className="user-menu__info">
-              <strong>{fullName}</strong>
-              <span>{member?.email}</span>
-              <small>{member?.status || 'Member'}</small>
+            <div className="user-menu__identity-details">
+              <strong>{name}</strong>
+              <span>{email}</span>
+
+              {membershipStatus ? (
+                <span className="user-menu__status">
+                  <span className="user-menu__status-dot" />
+                  {membershipStatus}
+                </span>
+              ) : (
+                <span className="user-menu__role">{roleLabel}</span>
+              )}
             </div>
           </div>
 
-          {subscription && (
-            <div className="user-menu__membership">
-              <span>YOUR MEMBERSHIP</span>
-              <strong>{subscription.plan_name}</strong>
-              <small>{subscription.status}</small>
-            </div>
-          )}
+          <div className="user-menu__divider" />
+
+          <nav className="user-menu__links">
+            {isMember && (
+              <Link
+                to="/member/profile"
+                className="user-menu__link"
+                role="menuitem"
+                onClick={() => setIsOpen(false)}
+              >
+                <Icon name="person" />
+                <span>View Profile</span>
+              </Link>
+            )}
+
+            <Link
+              to="/dashboard"
+              className="user-menu__link"
+              role="menuitem"
+              onClick={() => setIsOpen(false)}
+            >
+              <Icon name="dashboard" />
+              <span>My Dashboard</span>
+            </Link>
+          </nav>
 
           <div className="user-menu__divider" />
 
-          <Link
-            to="/member/profile"
-            className="user-menu__item"
-            onClick={() => setIsOpen(false)}
-          >
-            <Icon name="user" size={18} />
-            View Profile
-          </Link>
-
-          <Link
-            to="/dashboard"
-            className="user-menu__item"
-            onClick={() => setIsOpen(false)}
-          >
-            <Icon name="dashboard" size={18} />
-            My Dashboard
-          </Link>
-
           <button
             type="button"
-            className="user-menu__item user-menu__logout"
+            className="user-menu__link user-menu__logout"
+            role="menuitem"
             onClick={handleLogout}
           >
-            <Icon name="logout" size={18} />
-            Log out
+            <Icon name="logout" />
+            <span>Log out</span>
           </button>
         </div>
       )}
