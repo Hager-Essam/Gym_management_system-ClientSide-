@@ -20,7 +20,7 @@ export default function Facilities() {
 
         <div className="facilities__row facilities__row--bottom">
           <article className="card recovery">
-            <ImageSlot src={recovery.image} alt={recovery.title} className="recovery__photo" />
+            <ImageSlot src={recovery.image} alt={recovery.imageAlt} className="recovery__photo" />
             <div className="recovery__body">
               <IconBadge name="ac_unit" />
               <h3>{recovery.title}</h3>

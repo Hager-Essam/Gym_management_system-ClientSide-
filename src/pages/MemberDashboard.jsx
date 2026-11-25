@@ -81,7 +81,7 @@ export default function MemberDashboard() {
       getMemberAttendance(member.id, { page: 1, limit: VISITS_PER_PAGE }),
       getMemberSubscriptions(member.id),
       getMemberAttendance(member.id, { startDate: monthStart, limit: 1 }),
-      getMyPayments(member.id, { page: 1, limit: 5 }),
+      getMyPayments({ page: 1, limit: 5 }),
     ])
       .then(([visitsResult, subscriptionsResult, monthResult, paymentsResult]) => {
         if (!active) return;
@@ -533,9 +533,9 @@ export default function MemberDashboard() {
                   <p className="text-muted text-sm">No payments found.</p>
                 ) : null}
 
-                <p className="text-xs text-muted">
-                  Class schedules, workout programs, and body-composition scans are not available in the API yet.
-                </p>
+                <Link className="member-dash__more" to="/member/classes">
+                  Browse classes and trainers
+                </Link>
               </section>
             </div>
 

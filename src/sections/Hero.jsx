@@ -39,7 +39,7 @@ export default function Hero() {
           </ul>
         </div>
 
-        <ImageSlot src={hero.image} alt="Athletes training under green floor lighting" className="hero__image">
+        <ImageSlot src={hero.image} alt={hero.imageAlt} loading="eager" className="hero__image">
           <span className="hero__zone mono">{barVelocity.zone}</span>
 
           <div className="hero__readout hero__velocity">

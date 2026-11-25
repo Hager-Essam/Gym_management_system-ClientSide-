@@ -1,7 +1,7 @@
 /**
  * All the text/numbers shown on the home page live here.
  * Components receive this data as props, so you can edit content without touching layout code.
- * Photos go in /public/images/... (paths below). Until a photo exists, a placeholder is shown.
+ * Photos go in /public/images/... (paths below), with accessible descriptions alongside them.
  */
 
 export const navLinks = [
@@ -26,6 +26,7 @@ export const hero = {
     { icon: 'verified', label: 'NSCA-CSCS Accredited Staff' },
   ],
   image: '/images/hero.jpg',
+  imageAlt: 'Man training with battle ropes in a gym',
   barVelocity: { label: 'Bar velocity', value: '0.82', unit: 'm/s', zone: '100 RPM · Zone 4' },
   floorLoad: {
     label: 'Floor dynamic load',
@@ -231,23 +232,27 @@ export const facilities = [
     title: '12 Eleiko Olympic Racks',
     description: 'Power racks fitted with calibrated competition plate sets, safety straps, and integrated velocity tracking.',
     image: '/images/facilities/racks.jpg',
+    imageAlt: 'Man resting beside gym weight equipment',
   },
   {
     id: 2,
     title: 'Concept2 & Woodway Fleet',
     description: 'RowErgs, SkiErgs, and Woodway curved-belt treadmills for metabolic conditioning.',
     image: '/images/facilities/cardio.jpg',
+    imageAlt: 'Man walking on a treadmill in a gym',
   },
   {
     id: 3,
     title: '4,000 sq ft Functional Turf',
     description: 'Indoor turf lanes equipped with Rogue sleds, prowlers, climbing ropes, and battle ropes.',
     image: '/images/facilities/turf.jpg',
+    imageAlt: 'Man training with battle ropes on gym turf',
   },
 ];
 
 export const recovery = {
   image: '/images/facilities/recovery.jpg',
+  imageAlt: 'Man stretching on a mat after a workout',
   title: 'Thermal Contrast Recovery',
   description:
     'Scandinavian cedar saunas running at 195°F paired with continuously filtered 39°F ice-cold immersion tubs for rapid, systemic CNS reset.',

@@ -1,7 +1,7 @@
-# IronForge – Gym System (React + Vite)
+# IronForge – Gym Management System (React + Vite)
 
-A learning project: the IronForge landing page built with React, using the standard Vite project structure.
-Plain JavaScript (JSX) and plain CSS – no extra libraries, so you can focus on React itself.
+React client for the IronForge gym management API. The client uses React Router,
+Axios, and plain CSS.
 
 ## Run it
 
@@ -35,7 +35,7 @@ gym-system/
     │   ├── routing/        ← ProtectedRoute, GuestRoute, ScrollToHash
     │   └── ui/             ← tiny reusable pieces: Button, Icon, SectionHeading, ImageSlot...
     ├── context/            ← AuthContext.jsx (who is logged in + login/register/logout)
-    ├── services/           ← API client and wrappers for auth, members, plans, subscriptions, payments, and attendance
+    ├── services/           ← API client and wrappers for auth, members, plans, billing, classes, trainers, and admin
     ├── hooks/              ← custom hooks (useCountUp)
     ├── utils/              ← validators.js (form validation functions)
     ├── data/               ← all page text/numbers (landing.js)
@@ -46,13 +46,26 @@ Each component has its own `.css` file next to it (`Button.jsx` + `Button.css`).
 
 ## Routes
 
-| URL | Page | Who can see it |
+| URL | Page | Access |
 |---|---|---|
-| `/` | `HomePage` | everyone |
-| `/login` | `LoginPage` | logged-out visitors only (`GuestRoute`) |
-| `/register` | `RegisterPage` (`?plan=2` preselects a plan) | logged-out visitors only |
-| `/dashboard` | `DashboardPage` | logged-in members only (`ProtectedRoute`) |
-| anything else | `NotFoundPage` | everyone |
+| `/` | Home | Public |
+| `/plans`, `/plans/:planId` | Membership plans | Public |
+| `/login`, `/register` | Authentication | Signed out |
+| `/dashboard` | Role-based dashboard | Signed in |
+| `/member/profile`, `/member/subscription` | Profile and membership | Members |
+| `/member/classes` | Class bookings and trainer assignments | Members |
+| `/notifications` | Notification inbox | Signed in |
+| `/admin/operations` | Class management, reports, staff assignments, notifications, settings, audit log | Admin |
+| `/operations/floor`, `/operations/reports` | Front-desk and reports | Manager |
+| `/operations/members` | Member directory | Admin and manager |
+
+## Backend configuration
+
+The client defaults to `http://localhost:5000`. Set `VITE_API_BASE_URL` in a
+local `.env` file when the API is hosted elsewhere. Start the Node API and run
+its database migrations before using classes, trainer assignments, or payments.
+See `BACKEND_INTEGRATION_COMPLETE.md` for current endpoint coverage and mock
+checkout behavior.
 
 ## How the app is built (read in this order)
 
@@ -73,7 +86,9 @@ Each component has its own `.css` file next to it (`Button.jsx` + `Button.css`).
 
 **Try it:** go to `/dashboard` while logged out → you're redirected to `/login`. Log in → you land on `/dashboard`.
 
-> ⚠️ **The auth is a demo.** `services/authService.js` keeps accounts in the browser's `localStorage` so the UI works without a backend. Real authentication must happen on a server (hashed passwords, httpOnly cookie or token). When your Node/Express API is ready, only `authService.js` needs to change – the pages and context stay the same.
+Authentication and application data use the Node API. Session tokens are stored
+in browser storage; do not treat this client as a replacement for server-side
+authorization. Protected operations must continue to be enforced by the API.
 
 ## React concepts you'll see (and where)
 
@@ -109,9 +124,10 @@ public/images/facilities/racks.jpg  cardio.jpg  turf.jpg  recovery.jpg
 
 Different names? Change the paths in `src/data/landing.js`.
 
-## Good next steps
+## Notes
 
-- Build the Node/Express endpoints `POST /api/auth/register` and `POST /api/auth/login`, then rewrite `services/authService.js` to call them with `fetch`.
-- Implement "Forgot password?" as a new route (`/forgot-password`).
-- Grow `DashboardPage` into a real member area (nested routes: `/dashboard/bookings`, `/dashboard/progress`).
-- Fetch plans/coaches from your backend with `fetch` inside `useEffect`, replacing `data/landing.js`.
+- Membership checkout uses a mock provider lifecycle. The client does not
+  collect card numbers or CVVs.
+- The API exposes fixed roles; custom roles and permission policies are not
+  editable in the client.
+- Landing-page copy and images remain local presentation data.

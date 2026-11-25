@@ -18,18 +18,43 @@ function extractErrorMessage(error, fallback) {
   );
 }
 
-/** Get a member's payments. */
-export async function getMyPayments(userId, params = {}) {
-  if (!userId) throw new Error('A member ID is required to load payments.');
-
+/** Get the signed-in member's payment history. */
+export async function getMyPayments(params = {}) {
   try {
-    const response = await apiClient.get(
-      `/api/payments/member/${userId}`,
-      { params }
-    );
+    const response = await apiClient.get('/api/payments/history', { params });
     return response.data;
   } catch (error) {
     throw new Error(extractErrorMessage(error, 'Failed to load payments'));
+  }
+}
+
+/** Create or resume the backend's mock checkout session. */
+export async function createCheckout(data) {
+  try {
+    const response = await apiClient.post('/api/payments/checkout', data);
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, 'Failed to start checkout'));
+  }
+}
+
+/** Confirm a checkout session; payment outcomes are decided by the server. */
+export async function confirmCheckout(paymentId) {
+  try {
+    const response = await apiClient.post(`/api/payments/${paymentId}/confirm`);
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, 'Failed to confirm payment'));
+  }
+}
+
+/** Record an admin-created payment for a pending subscription. */
+export async function recordManualPayment(data) {
+  try {
+    const response = await apiClient.post('/api/payments', data);
+    return response.data.payment ?? response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, 'Failed to record payment'));
   }
 }
 

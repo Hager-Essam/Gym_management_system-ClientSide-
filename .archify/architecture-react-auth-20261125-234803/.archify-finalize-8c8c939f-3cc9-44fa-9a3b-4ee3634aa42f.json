@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "running",
+  "type": "architecture",
+  "quality": "showcase",
+  "startedAt": "2026-11-25T21:48:55.749Z",
+  "specification": {
+    "path": "E:\\OneDrive\\OneDrive - EL-Minia University - Students\\Desktop\\React\\gym_management\\Gym_management_system-ClientSide-\\.archify\\architecture-react-auth-20261125-234803\\candidate.json",
+    "sha256": "4f6a5a7fdebd83d8fb1857c7e97a106807d302b74936ca8682268583fae43ed6",
+    "bytes": 2198
+  },
+  "artifact": {
+    "path": "E:\\OneDrive\\OneDrive - EL-Minia University - Students\\Desktop\\React\\gym_management\\Gym_management_system-ClientSide-\\.archify\\architecture-react-auth-20261125-234803\\react-authentication-path.html"
+  },
+  "stages": {},
+  "browserCheck": {
+    "requested": true,
+    "ran": false
+  },
+  "diagnostics": [],
+  "evidence": {
+    "receipt": "E:\\OneDrive\\OneDrive - EL-Minia University - Students\\Desktop\\React\\gym_management\\Gym_management_system-ClientSide-\\.archify\\architecture-react-auth-20261125-234803\\react-authentication-path.finalize.json",
+    "summaryReceipt": "E:\\OneDrive\\OneDrive - EL-Minia University - Students\\Desktop\\React\\gym_management\\Gym_management_system-ClientSide-\\.archify\\architecture-react-auth-20261125-234803\\react-authentication-path.finalize-summary.json"
+  },
+  "visualReview": "not-requested"
+}

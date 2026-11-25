@@ -17,6 +17,10 @@ import MemberSubscriptionPage from './pages/MemberSubscriptionPage.jsx';
 import PlanDetailsPage from './pages/PlanDetailsPage.jsx';
 import PlansPage from './pages/PlansPage.jsx';
 import SubscribePage from './pages/SubscribePage.jsx';
+import MemberClassesPage from './pages/MemberClassesPage.jsx';
+import AdminOperationsPage from './pages/AdminOperationsPage.jsx';
+import NotificationsPage from './pages/NotificationsPage.jsx';
+import ManagerOperationsPage from './pages/ManagerOperationsPage.jsx';
 
 // Smart dashboard router that redirects based on user role
 function DashboardRouter() {
@@ -35,7 +39,7 @@ function DashboardRouter() {
   }
 
   // Coach goes to Coach Dashboard
-  if (user.role === 'coach') {
+  if (user.role === 'coach' || user.role === 'trainer') {
     return <CoachDashboard />;
   }
 
@@ -66,6 +70,13 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardRouter />} />
           <Route path="/dashboard/member" element={<MemberDashboard />} />
           <Route path="/dashboard/coach" element={<CoachDashboard />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route element={<ProtectedRoute roles={['admin']} />}>
+            <Route path="/admin/operations" element={<AdminOperationsPage />} />
+          </Route>
+          <Route element={<ProtectedRoute roles={['manager']} />}>
+            <Route path="/operations/:view" element={<ManagerOperationsPage />} />
+          </Route>
           {/* Legacy dashboard page */}
           <Route path="/dashboard/simple" element={<DashboardPage />} />
           {/* Operations pages */}
@@ -73,6 +84,7 @@ export default function App() {
 
           {/* Member-only pages */}
           <Route element={<ProtectedRoute roles={['member']} />}>
+            <Route path="/member/classes" element={<MemberClassesPage />} />
             <Route path="/subscribe/:planId" element={<SubscribePage />} />
             <Route path="/member/profile" element={<MemberProfilePage />} />
             <Route

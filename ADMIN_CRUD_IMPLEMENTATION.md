@@ -1,8 +1,13 @@
 # Admin CRUD Implementation - Complete Guide
 
-## 🎉 Implementation Status: COMPLETE
+## Current implementation status
 
-The IronForge Gym Management System now has **full CRUD functionality** for the admin panel. All features are working with localStorage data persistence.
+This document describes the original localStorage demo implementation and is
+kept as historical reference. Current admin screens use the Node API for
+supported member, staff, plan, subscription, payment, class, reporting,
+notification, settings, and audit-log operations. Some older form fields and
+examples below are not supported by the API and are no longer shown in the UI;
+see `BACKEND_INTEGRATION_COMPLETE.md` for current behavior.
 
 ---
 

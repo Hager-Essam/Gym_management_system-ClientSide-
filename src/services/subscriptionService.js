@@ -114,3 +114,44 @@ export async function updateSubscription(subscriptionId, data) {
     );
   }
 }
+
+async function updateSubscriptionAction(subscriptionId, data, fallback) {
+  try {
+    const response = await apiClient.patch(
+      `/api/subscriptions/${subscriptionId}/${data.action}`,
+      data.body || {}
+    );
+    return response.data.subscription ?? response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, fallback));
+  }
+}
+
+export function approveSubscription(subscriptionId) {
+  return updateSubscriptionAction(
+    subscriptionId,
+    { action: 'approve' },
+    'Failed to approve subscription'
+  );
+}
+
+export function rejectSubscription(subscriptionId, reason = '') {
+  return updateSubscriptionAction(
+    subscriptionId,
+    { action: 'reject', body: { reason } },
+    'Failed to reject subscription'
+  );
+}
+
+export async function renewSubscription(subscriptionId) {
+  try {
+    const response = await apiClient.post(
+      `/api/subscriptions/${subscriptionId}/renew`
+    );
+    return response.data.subscription ?? response.data;
+  } catch (error) {
+    throw new Error(
+      extractErrorMessage(error, 'Failed to renew subscription')
+    );
+  }
+}

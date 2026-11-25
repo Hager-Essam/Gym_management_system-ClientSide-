@@ -2,7 +2,7 @@ import { useState } from 'react';
 import FormField from '../auth/FormField.jsx';
 import Button from '../ui/Button.jsx';
 import Icon from '../ui/Icon.jsx';
-import { createUser } from '../../services/dataService.js';
+import { createAdminStaff } from '../../services/trainerService.js';
 import './AdminForms.css';
 
 export default function AddManagerForm({ onSuccess, onCancel }) {
@@ -13,10 +13,6 @@ export default function AddManagerForm({ onSuccess, onCancel }) {
     email: '',
     password: '',
     phone: '',
-    dateOfBirth: '',
-    gender: '',
-    position: '',
-    department: '',
   });
 
   function handleChange(e) {
@@ -43,10 +39,7 @@ export default function AddManagerForm({ onSuccess, onCancel }) {
     setLoading(true);
 
     try {
-      const newManager = await createUser({
-        ...values,
-        role: 'manager',
-      });
+      const newManager = await createAdminStaff({ ...values, role: 'manager' });
       
       onSuccess(newManager);
     } catch (err) {
@@ -108,58 +101,6 @@ export default function AddManagerForm({ onSuccess, onCancel }) {
           onChange={handleChange}
         />
 
-        <FormField
-          id="dateOfBirth"
-          name="dateOfBirth"
-          type="date"
-          label="Date of Birth"
-          value={values.dateOfBirth}
-          onChange={handleChange}
-        />
-
-        <div className="admin-form__field">
-          <label htmlFor="gender" className="admin-form__label">Gender</label>
-          <select
-            id="gender"
-            name="gender"
-            value={values.gender}
-            onChange={handleChange}
-            className="admin-form__select"
-          >
-            <option value="">Select Gender</option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="other">Other</option>
-            <option value="prefer-not-to-say">Prefer not to say</option>
-          </select>
-        </div>
-
-        <FormField
-          id="position"
-          name="position"
-          label="Position"
-          placeholder="Operations Manager, Front Desk Supervisor, etc."
-          value={values.position}
-          onChange={handleChange}
-        />
-
-        <div className="admin-form__field">
-          <label htmlFor="department" className="admin-form__label">Department</label>
-          <select
-            id="department"
-            name="department"
-            value={values.department}
-            onChange={handleChange}
-            className="admin-form__select"
-          >
-            <option value="">Select Department</option>
-            <option value="operations">Operations</option>
-            <option value="front-desk">Front Desk</option>
-            <option value="maintenance">Maintenance</option>
-            <option value="sales">Sales & Marketing</option>
-            <option value="administration">Administration</option>
-          </select>
-        </div>
       </div>
 
       <div className="admin-form__actions">

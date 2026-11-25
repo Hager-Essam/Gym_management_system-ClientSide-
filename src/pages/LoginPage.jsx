@@ -7,7 +7,6 @@ import FormField from '../components/auth/FormField.jsx';
 import Button from '../components/ui/Button.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { validateLogin } from '../utils/validators.js';
-import { seedDemoUsers } from '../utils/seedUsers.js';
 
 function buildPath(location) {
   if (!location?.pathname) return null;
@@ -32,7 +31,6 @@ export default function LoginPage() {
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [seedingUsers, setSeedingUsers] = useState(false);
 
   function handleChange(event) {
     const { name, value, type, checked } = event.target;
@@ -67,19 +65,6 @@ export default function LoginPage() {
     }
   }
 
-  async function handleSeedUsers() {
-    setSeedingUsers(true);
-    try {
-      await seedDemoUsers();
-      setSubmitError('');
-      alert('✅ Demo users created!\n\nMembers:\n• ahmed@ironforge.com / password123\n• sarah@ironforge.com / password123\n\nCoaches:\n• alex@ironforge.com / coach123\n• maya@ironforge.com / coach123\n\nManagement:\n• marcus@ironforge.com / manager123 (Manager)\n• admin@ironforge.com / admin123 (Admin)');
-    } catch (error) {
-      alert('Error seeding users: ' + error.message);
-    } finally {
-      setSeedingUsers(false);
-    }
-  }
-
   return (
     <AuthLayout
       title="Member portal login"
@@ -95,25 +80,6 @@ export default function LoginPage() {
     >
       <form className="auth-form" onSubmit={handleSubmit} noValidate>
         <FormAlert>{submitError || authError}</FormAlert>
-
-        {/* Development helper */}
-        {import.meta.env.DEV && (
-          <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(0, 255, 136, 0.05)', border: '1px solid rgba(0, 255, 136, 0.2)', borderRadius: '8px' }}>
-            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
-              🔧 Development Mode
-            </p>
-            <Button 
-              type="button" 
-              variant="outline" 
-              size="sm" 
-              onClick={handleSeedUsers}
-              disabled={seedingUsers}
-              style={{ width: '100%' }}
-            >
-              {seedingUsers ? 'Creating Demo Users...' : '🌱 Create Demo Users'}
-            </Button>
-          </div>
-        )}
 
         <FormField
           id="email"

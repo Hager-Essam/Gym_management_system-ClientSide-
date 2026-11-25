@@ -7,15 +7,15 @@ import Modal from '../components/ui/Modal.jsx';
 import AddTrainerForm from '../components/admin/AddTrainerForm.jsx';
 import AddManagerForm from '../components/admin/AddManagerForm.jsx';
 import AddPlanForm from '../components/admin/AddPlanForm.jsx';
+import AddMemberForm from '../components/admin/AddMemberForm.jsx';
+import EditMemberForm from '../components/admin/EditMemberForm.jsx';
+import EditStaffForm from '../components/admin/EditStaffForm.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import { adminDashboardData } from '../data/adminDashboardData.js';
-import { 
-  getTrainers, 
-  getManagers, 
-  deleteUser, 
-  suspendUser, 
-  activateUser,
-} from '../services/dataService.js';
+import {
+  getAdminDashboard,
+  getAllUsers,
+  updateMemberStatus,
+} from '../services/adminService.js';
 import {
   deleteMember,
   getAllMembers,
@@ -28,9 +28,12 @@ import {
   updatePlan,
 } from '../services/planService.js';
 import {
+  approveSubscription,
   cancelSubscription,
   getAllSubscriptions,
   getExpiringSubscriptions,
+  rejectSubscription,
+  renewSubscription,
   getSubscriptionById,
   updateSubscription,
 } from '../services/subscriptionService.js';
@@ -38,6 +41,7 @@ import {
   getAllPayments,
   getPaymentById,
   getPaymentStats,
+  recordManualPayment,
 } from '../services/paymentService.js';
 import {
   checkIn,
@@ -46,6 +50,13 @@ import {
   getTodayAttendance,
 } from '../services/attendanceService.js';
 import { getApiHealth } from '../services/systemService.js';
+import {
+  deleteAdminStaff,
+  getAdminStaff,
+  getAdminTrainers,
+  updateAdminStaffStatus,
+  updateAdminTrainerStatus,
+} from '../services/trainerService.js';
 import './AdminDashboard.css';
 
 export default function AdminDashboard() {
@@ -68,7 +79,35 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  const stats = adminDashboardData.stats;
+  const [dashboardData, setDashboardData] = useState(null);
+  const [dashboardError, setDashboardError] = useState('');
+  const [staffCount, setStaffCount] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([getAdminDashboard(), getAdminStaff({ page: 1, limit: 100 })])
+      .then(([data, staff]) => {
+        if (!active) return;
+        setDashboardData(data);
+        setStaffCount(staff.filter((person) => person.role === 'manager').length);
+      })
+      .catch((error) => {
+        if (active) setDashboardError(error.message || 'Unable to load admin dashboard data.');
+      });
+    return () => { active = false; };
+  }, []);
+
+  const stats = {
+    totalMembers: dashboardData?.totalMembers,
+    totalTrainers: dashboardData?.totalTrainers,
+    totalManagers: staffCount,
+    activeSubscriptions: dashboardData?.activeSubscriptions,
+    totalUsers: dashboardData
+      ? dashboardData.totalMembers + dashboardData.totalTrainers + (staffCount || 0)
+      : undefined,
+    monthlyRevenue: dashboardData?.totalRevenue,
+    currentCheckIns: dashboardData?.attendanceOverview?.currently_checked_in,
+  };
 
   return (
     <div className="admin-dashboard">
@@ -107,13 +146,10 @@ export default function AdminDashboard() {
                 <Icon name="dashboard" size={20} />
                 <span>Overview</span>
               </button>
-              <button
-                onClick={() => setActiveSection('analytics')}
-                className={`admin-dashboard__nav-link ${activeSection === 'analytics' ? 'active' : ''}`}
-              >
+              <Link to="/admin/operations?tab=reports" className="admin-dashboard__nav-link">
                 <Icon name="analytics" size={20} />
                 <span>Analytics & Reports</span>
-              </button>
+              </Link>
             </div>
 
             <div className="admin-dashboard__nav-section">
@@ -124,7 +160,7 @@ export default function AdminDashboard() {
               >
                 <Icon name="groups" size={20} />
                 <span>Members</span>
-                <span className="admin-dashboard__nav-badge">{stats.totalMembers}</span>
+                <span className="admin-dashboard__nav-badge">{stats.totalMembers ?? '—'}</span>
               </button>
               <button
                 onClick={() => setActiveSection('trainers')}
@@ -132,7 +168,7 @@ export default function AdminDashboard() {
               >
                 <Icon name="sports" size={20} />
                 <span>Trainers & Coaches</span>
-                <span className="admin-dashboard__nav-badge">{stats.totalTrainers}</span>
+                <span className="admin-dashboard__nav-badge">{stats.totalTrainers ?? '—'}</span>
               </button>
               <button
                 onClick={() => setActiveSection('managers')}
@@ -140,7 +176,7 @@ export default function AdminDashboard() {
               >
                 <Icon name="badge" size={20} />
                 <span>Managers & Staff</span>
-                <span className="admin-dashboard__nav-badge">{stats.totalManagers}</span>
+                <span className="admin-dashboard__nav-badge">{stats.totalManagers ?? '—'}</span>
               </button>
               <button
                 onClick={() => setActiveSection('users')}
@@ -148,7 +184,7 @@ export default function AdminDashboard() {
               >
                 <Icon name="people" size={20} />
                 <span>All Users</span>
-                <span className="admin-dashboard__nav-badge">{stats.totalUsers}</span>
+                <span className="admin-dashboard__nav-badge">{stats.totalUsers ?? '—'}</span>
               </button>
             </div>
 
@@ -167,7 +203,7 @@ export default function AdminDashboard() {
               >
                 <Icon name="autorenew" size={20} />
                 <span>Subscriptions</span>
-                <span className="admin-dashboard__nav-badge success">{stats.activeSubscriptions}</span>
+                <span className="admin-dashboard__nav-badge success">{stats.activeSubscriptions ?? '—'}</span>
               </button>
               <button
                 onClick={() => setActiveSection('payments')}
@@ -175,7 +211,7 @@ export default function AdminDashboard() {
               >
                 <Icon name="payments" size={20} />
                 <span>Payments & Revenue</span>
-                <span className="admin-dashboard__nav-badge accent">{stats.monthlyRevenue}</span>
+                <span className="admin-dashboard__nav-badge accent">{stats.monthlyRevenue ?? '—'}</span>
               </button>
             </div>
 
@@ -187,15 +223,16 @@ export default function AdminDashboard() {
               >
                 <Icon name="door_front" size={20} />
                 <span>Attendance & Check-ins</span>
-                <span className="admin-dashboard__nav-badge success">{stats.currentCheckIns}</span>
+                <span className="admin-dashboard__nav-badge success">{stats.currentCheckIns ?? '—'}</span>
               </button>
-              <button
-                onClick={() => setActiveSection('floor')}
-                className={`admin-dashboard__nav-link ${activeSection === 'floor' ? 'active' : ''}`}
-              >
+              <Link to="/admin/operations?tab=bookings" className="admin-dashboard__nav-link">
                 <Icon name="fitness_center" size={20} />
-                <span>Floor Operations</span>
-              </button>
+                <span>Floor & class operations</span>
+              </Link>
+              <Link to="/admin/operations?tab=classes" className="admin-dashboard__nav-link">
+                <Icon name="fitness_center" size={20} />
+                <span>Classes & bookings</span>
+              </Link>
               <Link to="/operations/members" className="admin-dashboard__nav-link">
                 <Icon name="view_list" size={20} />
                 <span>Member Directory</span>
@@ -204,35 +241,22 @@ export default function AdminDashboard() {
 
             <div className="admin-dashboard__nav-section">
               <p className="mono text-xs text-muted">SYSTEM & SETTINGS</p>
-              <button
-                onClick={() => setActiveSection('gym-settings')}
-                className={`admin-dashboard__nav-link ${activeSection === 'gym-settings' ? 'active' : ''}`}
-              >
+              <Link to="/admin/operations?tab=settings" className="admin-dashboard__nav-link">
                 <Icon name="settings" size={20} />
                 <span>Gym Settings</span>
-              </button>
-              <button
-                onClick={() => setActiveSection('roles')}
-                className={`admin-dashboard__nav-link ${activeSection === 'roles' ? 'active' : ''}`}
-              >
+              </Link>
+              <Link to="/admin/operations?tab=roles" className="admin-dashboard__nav-link">
                 <Icon name="shield" size={20} />
                 <span>Roles & Permissions</span>
-              </button>
-              <button
-                onClick={() => setActiveSection('system')}
-                className={`admin-dashboard__nav-link ${activeSection === 'system' ? 'active' : ''}`}
-              >
+              </Link>
+              <Link to="/admin/operations?tab=audit" className="admin-dashboard__nav-link">
                 <Icon name="tune" size={20} />
-                <span>System Configuration</span>
-              </button>
-              <button
-                onClick={() => setActiveSection('notifications')}
-                className={`admin-dashboard__nav-link ${activeSection === 'notifications' ? 'active' : ''}`}
-              >
+                <span>Audit & system activity</span>
+              </Link>
+              <Link to="/admin/operations?tab=notifications" className="admin-dashboard__nav-link">
                 <Icon name="notifications" size={20} />
-                <span>Notifications</span>
-                <span className="admin-dashboard__nav-dot"></span>
-              </button>
+                <span>Send notifications</span>
+              </Link>
             </div>
           </nav>
 
@@ -250,7 +274,12 @@ export default function AdminDashboard() {
 
         {/* Main Content */}
         <main className="admin-dashboard__main">
-          {activeSection === 'overview' && <OverviewSection stats={stats} />}
+          {dashboardError && (
+            <div className="admin-form__alert admin-form__alert--error" role="alert">
+              {dashboardError}
+            </div>
+          )}
+          {activeSection === 'overview' && <OverviewSection data={dashboardData} />}
           {activeSection === 'members' && <MembersSection />}
           {activeSection === 'trainers' && <TrainersSection />}
           {activeSection === 'managers' && <ManagersSection />}
@@ -259,10 +288,6 @@ export default function AdminDashboard() {
           {activeSection === 'subscriptions' && <SubscriptionsSection />}
           {activeSection === 'payments' && <PaymentsSection />}
           {activeSection === 'attendance' && <AttendanceSection />}
-          {activeSection === 'analytics' && <AnalyticsSection />}
-          {activeSection === 'gym-settings' && <GymSettingsSection />}
-          {activeSection === 'roles' && <RolesSection />}
-          {activeSection === 'system' && <SystemSection />}
         </main>
       </div>
     </div>
@@ -270,133 +295,78 @@ export default function AdminDashboard() {
 }
 
 // Overview Section
-function OverviewSection({ stats }) {
+function OverviewSection({ data }) {
+  const attendance = data?.attendanceOverview || {};
+  const statCards = [
+    ['TOTAL MEMBERS', data?.totalMembers, `Active: ${data?.activeMembers ?? '—'} · Inactive: ${data?.inactiveMembers ?? '—'}`, 'groups'],
+    ['TOTAL REVENUE', data?.totalRevenue === undefined ? undefined : `${data.totalRevenue} EGP`, 'Completed payments', 'payments'],
+    ['ACTIVE SUBSCRIPTIONS', data?.activeSubscriptions, `Pending: ${data?.pendingSubscriptions ?? '—'} · Expired: ${data?.expiredSubscriptions ?? '—'}`, 'autorenew'],
+    ['CHECK-INS TODAY', attendance.total_today, `Currently in gym: ${attendance.currently_checked_in ?? '—'}`, 'door_front'],
+  ];
+
   return (
     <div className="admin-section">
       <header className="admin-section__header">
         <div>
           <h1 className="admin-section__title">System Overview</h1>
-          <p className="text-muted">Complete system metrics and operational status</p>
+          <p className="text-muted">Live membership, revenue, attendance, and operations metrics</p>
         </div>
         <div className="admin-section__actions">
-          <Button variant="outline" size="sm">
-            <Icon name="download" />
-            Export Report
-          </Button>
-          <Button variant="primary" size="sm">
-            <Icon name="refresh" />
-            Refresh Data
-          </Button>
+          <Link to="/admin/operations?tab=reports"><Button variant="outline" size="sm"><Icon name="analytics" /> Reports</Button></Link>
+          <Link to="/admin/operations?tab=classes"><Button variant="primary" size="sm"><Icon name="fitness_center" /> Manage classes</Button></Link>
         </div>
       </header>
 
-      {/* Stats Grid */}
       <div className="admin-stats-grid">
-        <div className="admin-stat-card">
-          <div className="admin-stat-card__icon users">
-            <Icon name="groups" size={24} />
-          </div>
-          <div className="admin-stat-card__content">
-            <p className="mono text-xs text-muted">TOTAL MEMBERS</p>
-            <div className="admin-stat-card__value">
-              <span className="stat-number">{stats.totalMembers}</span>
-              <span className="admin-stat-card__change positive">+{stats.memberGrowth}</span>
+        {statCards.map(([label, value, note, icon]) => (
+          <div className="admin-stat-card" key={label}>
+            <div className="admin-stat-card__icon users"><Icon name={icon} size={24} /></div>
+            <div className="admin-stat-card__content">
+              <p className="mono text-xs text-muted">{label}</p>
+              <div className="admin-stat-card__value"><span className="stat-number">{value ?? '—'}</span></div>
+              <p className="text-xs text-muted">{note}</p>
             </div>
-            <p className="text-xs text-muted">Active: {stats.activeMembers} • Suspended: {stats.suspendedMembers}</p>
           </div>
-        </div>
-
-        <div className="admin-stat-card">
-          <div className="admin-stat-card__icon revenue">
-            <Icon name="payments" size={24} />
-          </div>
-          <div className="admin-stat-card__content">
-            <p className="mono text-xs text-muted">MONTHLY REVENUE</p>
-            <div className="admin-stat-card__value">
-              <span className="stat-number">{stats.monthlyRevenue}</span>
-              <span className="admin-stat-card__change positive">+{stats.revenueGrowth}</span>
-            </div>
-            <p className="text-xs text-muted">MRR: {stats.mrr} • Churn: {stats.churnRate}</p>
-          </div>
-        </div>
-
-        <div className="admin-stat-card">
-          <div className="admin-stat-card__icon attendance">
-            <Icon name="door_front" size={24} />
-          </div>
-          <div className="admin-stat-card__content">
-            <p className="mono text-xs text-muted">CHECK-INS TODAY</p>
-            <div className="admin-stat-card__value">
-              <span className="stat-number">{stats.todayCheckIns}</span>
-              <span className="admin-stat-card__change positive">+{stats.checkInGrowth}</span>
-            </div>
-            <p className="text-xs text-muted">Currently in gym: {stats.currentCheckIns}</p>
-          </div>
-        </div>
-
-        <div className="admin-stat-card">
-          <div className="admin-stat-card__icon staff">
-            <Icon name="badge" size={24} />
-          </div>
-          <div className="admin-stat-card__content">
-            <p className="mono text-xs text-muted">STAFF & TRAINERS</p>
-            <div className="admin-stat-card__value">
-              <span className="stat-number">{stats.totalStaff}</span>
-              <span className="admin-stat-card__badge success">All Active</span>
-            </div>
-            <p className="text-xs text-muted">Trainers: {stats.totalTrainers} • Managers: {stats.totalManagers}</p>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Quick Actions */}
-      <div className="admin-quick-actions">
-        <h2 className="admin-section__subtitle">Quick Actions</h2>
-        <div className="admin-quick-actions__grid">
-          <button className="admin-quick-action">
-            <Icon name="person_add" size={20} />
-            <span>Add New Member</span>
-          </button>
-          <button className="admin-quick-action">
-            <Icon name="badge" size={20} />
-            <span>Add Staff/Trainer</span>
-          </button>
-          <button className="admin-quick-action">
-            <Icon name="card_membership" size={20} />
-            <span>Create Plan</span>
-          </button>
-          <button className="admin-quick-action">
-            <Icon name="receipt" size={20} />
-            <span>Record Payment</span>
-          </button>
-          <button className="admin-quick-action">
-            <Icon name="contactless" size={20} />
-            <span>Manual Check-in</span>
-          </button>
-          <button className="admin-quick-action">
-            <Icon name="notifications" size={20} />
-            <span>Send Notification</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Recent Activity */}
-      <div className="admin-recent-activity">
-        <h2 className="admin-section__subtitle">Recent System Activity</h2>
-        <div className="admin-activity-list">
-          {stats.recentActivity.map((activity, idx) => (
-            <div key={idx} className="admin-activity-item">
-              <div className={`admin-activity-icon ${activity.type}`}>
-                <Icon name={activity.icon} size={16} />
-              </div>
-              <div className="admin-activity-content">
-                <p className="admin-activity-title">{activity.title}</p>
-                <p className="text-xs text-muted">{activity.description}</p>
-              </div>
-              <span className="text-xs text-muted">{activity.time}</span>
-            </div>
-          ))}
-        </div>
+      <div className="admin-dashboard__stats">
+        <section className="admin-table-container">
+          <h2 className="admin-section__subtitle">Upcoming classes</h2>
+          <table className="admin-table">
+            <thead><tr><th>Class</th><th>Date</th><th>Time</th><th>Trainer</th></tr></thead>
+            <tbody>
+              {!data ? <tr><td colSpan="4" className="admin-table__empty">Loading live dashboard…</td></tr>
+                : (data.upcomingClasses || []).length === 0
+                ? <tr><td colSpan="4" className="admin-table__empty">No upcoming classes scheduled.</td></tr>
+                : data.upcomingClasses.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.class_name}</td>
+                    <td>{String(item.scheduled_date || '').slice(0, 10)}</td>
+                    <td>{String(item.start_time || '').slice(0, 5)}</td>
+                    <td>{item.trainer_name || 'Unassigned'}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </section>
+        <section className="admin-table-container">
+          <h2 className="admin-section__subtitle">Recent registrations</h2>
+          <table className="admin-table">
+            <thead><tr><th>Member</th><th>Email</th><th>Joined</th></tr></thead>
+            <tbody>
+              {!data ? <tr><td colSpan="3" className="admin-table__empty">Loading live dashboard…</td></tr>
+                : (data.recentRegistrations || []).length === 0
+                ? <tr><td colSpan="3" className="admin-table__empty">No registrations found.</td></tr>
+                : data.recentRegistrations.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.full_name}</td><td>{item.email}</td>
+                    <td>{item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </section>
       </div>
     </div>
   );
@@ -405,6 +375,8 @@ function OverviewSection({ stats }) {
 // Members Section
 function MembersSection() {
   const [members, setMembers] = useState([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingMember, setEditingMember] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -445,7 +417,7 @@ function MembersSection() {
     if (!confirm('Suspend this member?')) return;
 
     try {
-      await updateMember(memberId, { status: 'suspended' });
+      await updateMemberStatus(memberId, 'suspended');
       await loadMembers();
     } catch (err) {
       alert('Error suspending member: ' + err.message);
@@ -454,7 +426,7 @@ function MembersSection() {
 
   async function handleActivate(memberId) {
     try {
-      await updateMember(memberId, { status: 'active' });
+      await updateMemberStatus(memberId, 'active');
       await loadMembers();
     } catch (err) {
       alert('Error activating member: ' + err.message);
@@ -477,6 +449,10 @@ function MembersSection() {
           <p className="text-muted">Manage all gym members, subscriptions, and access</p>
         </div>
         <div className="admin-section__actions">
+          <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
+            <Icon name="person_add" />
+            Add Member
+          </Button>
           <Link to="/operations/members">
             <Button variant="outline" size="sm">
               <Icon name="view_list" />
@@ -507,6 +483,7 @@ function MembersSection() {
         >
           <option value="all">All Status</option>
           <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
           <option value="suspended">Suspended</option>
         </select>
       </div>
@@ -562,6 +539,20 @@ function MembersSection() {
                         onClick={async () => {
                           try {
                             const result = await getMemberById(member.id);
+                            setEditingMember(result.member);
+                          } catch (err) {
+                            alert('Error loading member: ' + err.message);
+                          }
+                        }}
+                        className="admin-action-btn"
+                        title="Edit member"
+                      >
+                        <Icon name="edit" size={18} />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const result = await getMemberById(member.id);
                             const details = result.member;
                             window.alert(
                               `${details.fullName}\n${details.email}\nPhone: ${details.phone || '—'}\nSubscription: ${result.subscription?.plan_name || 'None'}`
@@ -608,6 +599,29 @@ function MembersSection() {
         </table>
       </div>
 
+      {showAddModal && (
+        <Modal title="Add New Member" onClose={() => setShowAddModal(false)}>
+          <AddMemberForm
+            onSuccess={async () => {
+              setShowAddModal(false);
+              await loadMembers();
+            }}
+            onCancel={() => setShowAddModal(false)}
+          />
+        </Modal>
+      )}
+      {editingMember && (
+        <Modal title="Edit Member" onClose={() => setEditingMember(null)}>
+          <EditMemberForm
+            member={editingMember}
+            onSuccess={async () => {
+              setEditingMember(null);
+              await loadMembers();
+            }}
+            onCancel={() => setEditingMember(null)}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -616,15 +630,25 @@ function MembersSection() {
 function TrainersSection() {
   const [trainers, setTrainers] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTrainer, setEditingTrainer] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadTrainers();
   }, []);
 
-  function loadTrainers() {
-    const allTrainers = getTrainers();
-    setTrainers(allTrainers);
+  async function loadTrainers() {
+    setLoading(true);
+    setError('');
+    try {
+      setTrainers(await getAdminTrainers({ page: 1, limit: 100 }));
+    } catch (loadError) {
+      setError(loadError.message || 'Unable to load trainers.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleDelete(trainerId) {
@@ -633,20 +657,17 @@ function TrainersSection() {
     }
 
     try {
-      await deleteUser(trainerId);
-      loadTrainers();
+      await deleteAdminStaff(trainerId);
+      await loadTrainers();
     } catch (err) {
       alert('Error deleting trainer: ' + err.message);
     }
   }
 
   async function handleSuspend(trainerId) {
-    const reason = prompt('Reason for suspension:');
-    if (reason === null) return;
-
     try {
-      await suspendUser(trainerId, reason);
-      loadTrainers();
+      await updateAdminTrainerStatus(trainerId, 'suspended');
+      await loadTrainers();
     } catch (err) {
       alert('Error suspending trainer: ' + err.message);
     }
@@ -654,8 +675,8 @@ function TrainersSection() {
 
   async function handleActivate(trainerId) {
     try {
-      await activateUser(trainerId);
-      loadTrainers();
+      await updateAdminTrainerStatus(trainerId, 'active');
+      await loadTrainers();
     } catch (err) {
       alert('Error activating trainer: ' + err.message);
     }
@@ -667,9 +688,9 @@ function TrainersSection() {
     alert(`Trainer ${newTrainer.fullName} added successfully!`);
   }
 
-  const filteredTrainers = trainers.filter(trainer =>
-    trainer.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    trainer.email.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredTrainers = trainers.filter((trainer) =>
+    (trainer.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (trainer.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -686,6 +707,8 @@ function TrainersSection() {
           </Button>
         </div>
       </header>
+
+      {error && <div className="admin-form__alert admin-form__alert--error" role="alert">{error}</div>}
 
       {/* Search */}
       <div className="admin-filters">
@@ -715,7 +738,9 @@ function TrainersSection() {
             </tr>
           </thead>
           <tbody>
-            {filteredTrainers.length === 0 ? (
+            {loading ? (
+              <tr><td colSpan="6" className="admin-table__empty">Loading trainers…</td></tr>
+            ) : filteredTrainers.length === 0 ? (
               <tr>
                 <td colSpan="6" className="admin-table__empty">
                   <Icon name="search_off" size={32} />
@@ -764,6 +789,13 @@ function TrainersSection() {
                         </button>
                       )}
                       <button
+                        onClick={() => setEditingTrainer(trainer)}
+                        className="admin-action-btn"
+                        title="Edit trainer"
+                      >
+                        <Icon name="edit" size={18} />
+                      </button>
+                      <button
                         onClick={() => handleDelete(trainer.id)}
                         className="admin-action-btn admin-action-btn--danger"
                         title="Delete"
@@ -791,6 +823,19 @@ function TrainersSection() {
           />
         </Modal>
       )}
+      {editingTrainer && (
+        <Modal title="Edit Trainer" onClose={() => setEditingTrainer(null)}>
+          <EditStaffForm
+            person={editingTrainer}
+            isTrainer
+            onSuccess={async () => {
+              setEditingTrainer(null);
+              await loadTrainers();
+            }}
+            onCancel={() => setEditingTrainer(null)}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -799,15 +844,25 @@ function TrainersSection() {
 function ManagersSection() {
   const [managers, setManagers] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingManager, setEditingManager] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadManagers();
   }, []);
 
-  function loadManagers() {
-    const allManagers = getManagers();
-    setManagers(allManagers);
+  async function loadManagers() {
+    setLoading(true);
+    setError('');
+    try {
+      setManagers(await getAdminStaff({ page: 1, limit: 100, role: 'manager' }));
+    } catch (loadError) {
+      setError(loadError.message || 'Unable to load managers.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleDelete(managerId) {
@@ -816,20 +871,17 @@ function ManagersSection() {
     }
 
     try {
-      await deleteUser(managerId);
-      loadManagers();
+      await deleteAdminStaff(managerId);
+      await loadManagers();
     } catch (err) {
       alert('Error deleting manager: ' + err.message);
     }
   }
 
   async function handleSuspend(managerId) {
-    const reason = prompt('Reason for suspension:');
-    if (reason === null) return;
-
     try {
-      await suspendUser(managerId, reason);
-      loadManagers();
+      await updateAdminStaffStatus(managerId, 'suspended');
+      await loadManagers();
     } catch (err) {
       alert('Error suspending manager: ' + err.message);
     }
@@ -837,8 +889,8 @@ function ManagersSection() {
 
   async function handleActivate(managerId) {
     try {
-      await activateUser(managerId);
-      loadManagers();
+      await updateAdminStaffStatus(managerId, 'active');
+      await loadManagers();
     } catch (err) {
       alert('Error activating manager: ' + err.message);
     }
@@ -850,9 +902,9 @@ function ManagersSection() {
     alert(`Manager ${newManager.fullName} added successfully!`);
   }
 
-  const filteredManagers = managers.filter(manager =>
-    manager.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    manager.email.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredManagers = managers.filter((manager) =>
+    (manager.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (manager.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -869,6 +921,8 @@ function ManagersSection() {
           </Button>
         </div>
       </header>
+
+      {error && <div className="admin-form__alert admin-form__alert--error" role="alert">{error}</div>}
 
       {/* Search */}
       <div className="admin-filters">
@@ -898,7 +952,9 @@ function ManagersSection() {
             </tr>
           </thead>
           <tbody>
-            {filteredManagers.length === 0 ? (
+            {loading ? (
+              <tr><td colSpan="6" className="admin-table__empty">Loading managers…</td></tr>
+            ) : filteredManagers.length === 0 ? (
               <tr>
                 <td colSpan="6" className="admin-table__empty">
                   <Icon name="search_off" size={32} />
@@ -947,6 +1003,13 @@ function ManagersSection() {
                         </button>
                       )}
                       <button
+                        onClick={() => setEditingManager(manager)}
+                        className="admin-action-btn"
+                        title="Edit staff member"
+                      >
+                        <Icon name="edit" size={18} />
+                      </button>
+                      <button
                         onClick={() => handleDelete(manager.id)}
                         className="admin-action-btn admin-action-btn--danger"
                         title="Delete"
@@ -974,12 +1037,37 @@ function ManagersSection() {
           />
         </Modal>
       )}
+      {editingManager && (
+        <Modal title="Edit Staff Member" onClose={() => setEditingManager(null)}>
+          <EditStaffForm
+            person={editingManager}
+            onSuccess={async () => {
+              setEditingManager(null);
+              await loadManagers();
+            }}
+            onCancel={() => setEditingManager(null)}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
 
 // Users Section
 function UsersSection() {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    getAllUsers()
+      .then((result) => { if (active) setUsers(result); })
+      .catch((loadError) => { if (active) setError(loadError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
   return (
     <div className="admin-section">
       <header className="admin-section__header">
@@ -995,10 +1083,24 @@ function UsersSection() {
         </div>
       </header>
 
-      <div className="admin-placeholder">
-        <Icon name="people" size={48} />
-        <h3>Universal User Directory</h3>
-        <p>View and manage all users: members, trainers, managers, and admins.</p>
+      {error && <div className="admin-form__alert admin-form__alert--error" role="alert">{error}</div>}
+      <div className="admin-table-container">
+        <table className="admin-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan="5" className="admin-table__empty">Loading users…</td></tr>
+              : users.length === 0 ? <tr><td colSpan="5" className="admin-table__empty">No users found.</td></tr>
+              : users.map((person) => (
+                <tr key={person.id}>
+                  <td>{person.fullName || '—'}</td>
+                  <td>{person.email}</td>
+                  <td>{person.role}</td>
+                  <td>{person.status}</td>
+                  <td>{person.createdAt ? new Date(person.createdAt).toLocaleDateString() : '—'}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -1235,6 +1337,38 @@ function SubscriptionsSection() {
     }
   }
 
+  async function handleApprove(subscriptionId) {
+    setActionError('');
+    try {
+      await approveSubscription(subscriptionId);
+      await loadSubscriptions();
+    } catch (err) {
+      setActionError(err.message || 'Unable to approve subscription.');
+    }
+  }
+
+  async function handleReject(subscriptionId) {
+    const reason = window.prompt('Reason for rejecting this subscription:', 'Rejected by administrator');
+    if (reason === null) return;
+    setActionError('');
+    try {
+      await rejectSubscription(subscriptionId, reason);
+      await loadSubscriptions();
+    } catch (err) {
+      setActionError(err.message || 'Unable to reject subscription.');
+    }
+  }
+
+  async function handleRenew(subscriptionId) {
+    setActionError('');
+    try {
+      await renewSubscription(subscriptionId);
+      await loadSubscriptions();
+    } catch (err) {
+      setActionError(err.message || 'Unable to renew subscription.');
+    }
+  }
+
   async function handleView(subscriptionId) {
     setActionError('');
     try {
@@ -1317,6 +1451,21 @@ function SubscriptionsSection() {
                         </button>
                       </>
                     )}
+                    {subscription.status === 'pending' && (
+                      <>
+                        <button onClick={() => handleApprove(subscription.id)} className="admin-action-btn admin-action-btn--success" title="Approve">
+                          <Icon name="check_circle" size={18} />
+                        </button>
+                        <button onClick={() => handleReject(subscription.id)} className="admin-action-btn admin-action-btn--danger" title="Reject">
+                          <Icon name="cancel" size={18} />
+                        </button>
+                      </>
+                    )}
+                    {subscription.status === 'expired' && (
+                      <button onClick={() => handleRenew(subscription.id)} className="admin-action-btn admin-action-btn--success" title="Renew">
+                        <Icon name="autorenew" size={18} />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -1331,22 +1480,33 @@ function SubscriptionsSection() {
 // Payments Section
 function PaymentsSection() {
   const [payments, setPayments] = useState([]);
+  const [pendingSubscriptions, setPendingSubscriptions] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedPayment, setSelectedPayment] = useState(null);
+  const [manualPayment, setManualPayment] = useState({
+    subscriptionId: '',
+    paymentMethod: 'cash',
+    description: '',
+  });
+  const [savingPayment, setSavingPayment] = useState(false);
 
   async function loadPayments() {
     setLoading(true);
     setError('');
 
     try {
-      const [paymentsResult, statsResult] = await Promise.all([
+      const [paymentsResult, statsResult, subscriptionsResult] = await Promise.all([
         getAllPayments({ page: 1, limit: 50 }),
         getPaymentStats(),
+        getAllSubscriptions({ page: 1, limit: 100 }),
       ]);
       setPayments(paymentsResult.payments || []);
       setStats(statsResult.overall || null);
+      setPendingSubscriptions(
+        (subscriptionsResult.subscriptions || []).filter((item) => item.status === 'pending')
+      );
     } catch (err) {
       setError(err.message || 'Unable to load payments.');
     } finally {
@@ -1364,6 +1524,21 @@ function PaymentsSection() {
       setSelectedPayment(await getPaymentById(paymentId));
     } catch (err) {
       setError(err.message || 'Unable to load payment details.');
+    }
+  }
+
+  async function handleRecordPayment(event) {
+    event.preventDefault();
+    setError('');
+    setSavingPayment(true);
+    try {
+      await recordManualPayment(manualPayment);
+      setManualPayment({ subscriptionId: '', paymentMethod: 'cash', description: '' });
+      await loadPayments();
+    } catch (actionError) {
+      setError(actionError.message || 'Unable to record manual payment.');
+    } finally {
+      setSavingPayment(false);
     }
   }
 
@@ -1391,6 +1566,43 @@ function PaymentsSection() {
           <div className="admin-stat-card"><span>Pending amount</span><strong>{stats.pending_amount ?? 0}</strong></div>
         </div>
       )}
+
+      <form className="admin-section__actions" onSubmit={handleRecordPayment}>
+        <label>
+          Pending subscription
+          <select
+            value={manualPayment.subscriptionId}
+            onChange={(event) => setManualPayment((current) => ({ ...current, subscriptionId: event.target.value }))}
+            required
+          >
+            <option value="">Select a pending subscription</option>
+            {pendingSubscriptions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.full_name || item.email || item.user_id} · {item.plan_name || 'Plan'} · {item.amount} {item.currency}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Payment method
+          <select
+            value={manualPayment.paymentMethod}
+            onChange={(event) => setManualPayment((current) => ({ ...current, paymentMethod: event.target.value }))}
+          >
+            <option value="cash">Cash</option>
+            <option value="bank_transfer">Bank transfer</option>
+          </select>
+        </label>
+        <input
+          value={manualPayment.description}
+          onChange={(event) => setManualPayment((current) => ({ ...current, description: event.target.value }))}
+          placeholder="Optional payment note"
+          aria-label="Payment description"
+        />
+        <Button type="submit" disabled={savingPayment || pendingSubscriptions.length === 0}>
+          {savingPayment ? 'Recording…' : 'Record manual payment'}
+        </Button>
+      </form>
 
       {selectedPayment && (
         <div className="admin-form__alert" role="status">

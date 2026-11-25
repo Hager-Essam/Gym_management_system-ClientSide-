@@ -8,7 +8,7 @@ import './DashboardNav.css';
 export default function DashboardNav() {
   const { user } = useAuth();
 
-  const navItems = user?.role === 'coach' 
+  const navItems = user?.role === 'coach' || user?.role === 'trainer'
     ? [
         { label: 'Dashboard', href: '/dashboard', icon: 'dashboard' },
         { label: 'My Members', href: '/dashboard/coach#members', icon: 'groups' },
@@ -19,12 +19,19 @@ export default function DashboardNav() {
     ? [
         { label: 'Dashboard', href: '/dashboard', icon: 'dashboard' },
         { label: 'Members', href: '/operations/members', icon: 'groups' },
-        { label: 'Operations', href: '/operations/floor', icon: 'business' },
-        { label: 'Reports', href: '/operations/reports', icon: 'analytics' },
+        ...(user?.role === 'admin'
+          ? [{ label: 'Operations', href: '/admin/operations', icon: 'business' }]
+          : [
+              { label: 'Floor', href: '/operations/floor', icon: 'door_front' },
+              { label: 'Reports', href: '/operations/reports', icon: 'analytics' },
+            ]),
+        { label: 'Notifications', href: '/notifications', icon: 'notifications' },
       ]
     : [
         { label: 'Dashboard', href: '/dashboard', icon: 'dashboard' },
         { label: 'Membership', href: '/member/subscription', icon: 'card_membership' },
+        { label: 'Classes & trainers', href: '/member/classes', icon: 'fitness_center' },
+        { label: 'Notifications', href: '/notifications', icon: 'notifications' },
         { label: 'My profile', href: '/member/profile', icon: 'person' },
       ];
 

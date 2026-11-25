@@ -7,7 +7,7 @@ import Icon from '../components/ui/Icon.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useMemberProfile } from '../context/MemberProfileContext.jsx';
 import { getPlanById } from '../services/planService.js';
-import { createSubscription } from '../services/subscriptionService.js';
+import { confirmCheckout, createCheckout } from '../services/paymentService.js';
 
 import './SubscribePage.css';
 
@@ -43,7 +43,7 @@ export default function SubscribePage() {
   const [autoRenew, setAutoRenew] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [subscription, setSubscription] = useState(null);
+  const [checkoutResult, setCheckoutResult] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -84,9 +84,7 @@ export default function SubscribePage() {
   async function handleSubmit(event) {
     event.preventDefault();
 
-    const userId = user?.id || user?.userId || user?._id;
-
-    if (!userId) {
+    if (!user?.id) {
       setError('We could not find your account ID. Please sign in again.');
       return;
     }
@@ -95,26 +93,23 @@ export default function SubscribePage() {
     setError('');
 
     try {
-      const result = await createSubscription({
-        userId,
+      const checkout = await createCheckout({
         planId: plan?.id || planId,
         paymentMethod,
         autoRenew,
       });
 
-      if (result?.success === false) {
-        throw new Error(result.message || 'Unable to create your subscription.');
+      const paymentId = checkout?.payment?.id;
+      if (!paymentId) {
+        throw new Error('The server did not create a checkout payment.');
       }
 
-      const created =
-        result?.data?.subscription ||
-        result?.subscription ||
-        null;
+      const result = await confirmCheckout(paymentId);
+      setCheckoutResult(result);
 
-      setSubscription(created || {});
-
-      // Refresh the member profile so the header/menu shows the new membership.
-      refreshProfile().catch(() => {});
+      if (result?.payment?.status === 'completed') {
+        refreshProfile().catch(() => {});
+      }
     } catch (err) {
       setError(err.message || 'Unable to create your subscription.');
     } finally {
@@ -204,57 +199,73 @@ export default function SubscribePage() {
                 </section>
 
                 <section className="card subscribe__checkout">
-                  {subscription ? (
+                  {checkoutResult ? (
                     <div className="subscribe__success">
                       <span className="subscribe__success-icon">
-                        <Icon name="check_circle" size={40} />
+                        <Icon
+                          name={checkoutResult.payment?.status === 'completed' ? 'check_circle' : 'error'}
+                          size={40}
+                        />
                       </span>
 
-                      <h2>Subscription activated</h2>
+                      <h2>
+                        {checkoutResult.payment?.status === 'completed'
+                          ? 'Subscription activated'
+                          : 'Payment was not completed'}
+                      </h2>
 
                       <p>
-                        You are now subscribed to <strong>{plan.name}</strong>.
-                        Your membership is ready to use.
+                        {checkoutResult.payment?.status === 'completed'
+                          ? <>You are now subscribed to <strong>{plan.name}</strong>. Your membership is ready to use.</>
+                          : 'The payment could not be completed. Your membership has not been activated.'}
                       </p>
 
                       <dl className="subscribe__summary">
                         <div>
-                          <dt>Status</dt>
-                          <dd>{subscription.status || 'active'}</dd>
+                          <dt>Payment status</dt>
+                          <dd>{checkoutResult.payment?.status || 'unknown'}</dd>
                         </div>
                         <div>
                           <dt>Amount</dt>
-                          <dd>{formatMoney(subscription.amount ?? plan.price)}</dd>
+                          <dd>{formatMoney(checkoutResult.payment?.amount ?? plan.price)}</dd>
                         </div>
                         <div>
-                          <dt>Started</dt>
-                          <dd>{formatDate(subscription.start_date)}</dd>
+                          <dt>Membership status</dt>
+                          <dd>{checkoutResult.subscription?.status || 'pending'}</dd>
                         </div>
                         <div>
-                          <dt>Renews</dt>
-                          <dd>{formatDate(subscription.end_date)}</dd>
+                          <dt>Invoice</dt>
+                          <dd>{checkoutResult.payment?.invoiceNumber || checkoutResult.payment?.invoice_number || '—'}</dd>
                         </div>
                         <div>
                           <dt>Payment</dt>
-                          <dd>{subscription.payment_method || paymentMethod}</dd>
-                        </div>
-                        <div>
-                          <dt>Auto-renew</dt>
-                          <dd>{String(subscription.auto_renew ?? autoRenew)}</dd>
+                          <dd>{checkoutResult.payment?.paymentMethod || checkoutResult.payment?.payment_method || paymentMethod}</dd>
                         </div>
                       </dl>
 
-                      <Button to="/dashboard/member" className="btn--block">
-                        Go to my dashboard
-                      </Button>
+                      {checkoutResult.payment?.status === 'completed' ? (
+                        <Button to="/dashboard/member" className="btn--block">
+                          Go to my dashboard
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          className="btn--block"
+                          onClick={() => setCheckoutResult(null)}
+                        >
+                          Try checkout again
+                        </Button>
+                      )}
 
-                      <Button
-                        to="/member/profile"
-                        variant="outline"
-                        className="btn--block"
-                      >
-                        View my profile
-                      </Button>
+                      {checkoutResult.payment?.status === 'completed' && (
+                        <Button
+                          to="/member/profile"
+                          variant="outline"
+                          className="btn--block"
+                        >
+                          View my profile
+                        </Button>
+                      )}
                     </div>
                   ) : (
                     <form onSubmit={handleSubmit}>
@@ -293,14 +304,14 @@ export default function SubscribePage() {
                           <input
                             type="radio"
                             name="paymentMethod"
-                            value="cash"
-                            checked={paymentMethod === 'cash'}
-                            onChange={() => setPaymentMethod('cash')}
+                            value="wallet"
+                            checked={paymentMethod === 'wallet'}
+                            onChange={() => setPaymentMethod('wallet')}
                           />
                           <Icon name="payments" />
                           <span>
-                            <strong>Cash at the front desk</strong>
-                            <small>Pay on your next visit</small>
+                            <strong>Digital wallet</strong>
+                            <small>Demo checkout only; no payment credentials are collected</small>
                           </span>
                         </label>
                       </fieldset>
@@ -332,8 +343,8 @@ export default function SubscribePage() {
                       >
                         <Icon name="lock" size={16} />
                         {submitting
-                          ? 'Activating membership...'
-                          : `Subscribe for ${formatMoney(plan.price)}`}
+                          ? 'Confirming payment...'
+                          : `Continue for ${formatMoney(plan.price)}`}
                       </Button>
 
                       <p className="subscribe__fine">

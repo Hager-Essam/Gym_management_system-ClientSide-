@@ -1,0 +1,120 @@
+.notifications-page {
+  padding-block: 3rem 5rem;
+}
+
+.notifications-page__header,
+.notifications-page__actions,
+.notifications-page__item,
+.notifications-page__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.notifications-page__header {
+  align-items: flex-start;
+  margin-bottom: 2rem;
+}
+
+.notifications-page__header h1 {
+  margin: 0.35rem 0;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+}
+
+.notifications-page__list {
+  display: grid;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notifications-page__item {
+  justify-content: flex-start;
+  padding: 1.15rem;
+  border: 1px solid transparent;
+}
+
+.notifications-page__item.is-unread {
+  border-color: rgba(214,255,63,.32);
+}
+
+.notifications-page__icon {
+  display: grid;
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(214,255,63,.1);
+  color: var(--color-accent, #d6ff3f);
+}
+
+.notifications-page__icon--warning {
+  background: rgba(255,174,66,.12);
+  color: #ffba68;
+}
+
+.notifications-page__icon--error {
+  background: rgba(255,80,80,.12);
+  color: #ff8888;
+}
+
+.notifications-page__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notifications-page__title {
+  justify-content: flex-start;
+}
+
+.notifications-page__title h2,
+.notifications-page__content p {
+  margin: 0;
+}
+
+.notifications-page__title h2 {
+  font-size: 1.05rem;
+}
+
+.notifications-page__title span {
+  color: var(--color-accent, #d6ff3f);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.notifications-page__content p {
+  margin-block: 0.45rem;
+  white-space: pre-wrap;
+}
+
+.notifications-page__content time {
+  color: var(--color-text-muted, #aaa);
+  font-size: 0.8rem;
+}
+
+.notifications-page__empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+  padding: 3rem 1rem;
+  color: var(--color-text-muted, #aaa);
+  text-align: center;
+}
+
+.notifications-page__error {
+  padding: 0.8rem 1rem;
+  border-radius: 0.35rem;
+  background: rgba(255,80,80,.12);
+  color: #ff9292;
+}
+
+@media (max-width: 640px) {
+  .notifications-page__header,
+  .notifications-page__item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "React Client: Browser-to-API Authentication",
+    "output": ".archify/architecture-react-auth-20261125-234803/react-authentication-path.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Hager-Essam/Gym_management_system-ClientSide-.git",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "2e2dd87fdb5f7348e5d591c68a3f0c6171115f6d"
+    }
+  },
+  "layout": {
+    "mode": "auto"
+  },
+  "components": [
+    {
+      "id": "gym-user",
+      "type": "external",
+      "label": "Gym user",
+      "sublabel": "Browser"
+    },
+    {
+      "id": "react-spa",
+      "type": "frontend",
+      "label": "React SPA",
+      "sublabel": "Router + auth context",
+      "sources": [
+        {
+          "path": "src/main.jsx",
+          "line": 31,
+          "end_line": 40
+        },
+        {
+          "path": "src/context/AuthContext.jsx",
+          "line": 43,
+          "end_line": 44
+        }
+      ]
+    },
+    {
+      "id": "auth-client",
+      "type": "frontend",
+      "label": "Auth service + Axios",
+      "sublabel": "Login · register · current user",
+      "sources": [
+        {
+          "path": "src/services/authService.js",
+          "line": 57,
+          "end_line": 85
+        },
+        {
+          "path": "src/services/apiClient.js",
+          "line": 10,
+          "end_line": 29
+        },
+        {
+          "path": "src/services/apiClient.js",
+          "line": 47,
+          "end_line": 53
+        }
+      ]
+    },
+    {
+      "id": "node-api",
+      "type": "external",
+      "label": "Node.js Gym API",
+      "sublabel": "Configured HTTP base URL"
+    }
+  ],
+  "connections": [
+    {
+      "from": "gym-user",
+      "to": "react-spa",
+      "label": "uses browser app"
+    },
+    {
+      "from": "react-spa",
+      "to": "auth-client",
+      "label": "login · register · validate session"
+    },
+    {
+      "from": "auth-client",
+      "to": "node-api",
+      "label": "HTTP JSON · bearer token"
+    }
+  ]
+}

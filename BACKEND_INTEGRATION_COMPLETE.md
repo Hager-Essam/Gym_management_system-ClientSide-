@@ -2,17 +2,36 @@
 
 ## Current React endpoint coverage
 
-The React app now uses the Node API for authentication, member profiles and
-attendance history, public plans and admin plan management, member management,
-subscriptions, payments, attendance check-in/out, and the `/health` status
-indicator. Admin views use the API rather than localStorage for members and
-plans; subscription, payment, and attendance sections load live API data.
+The React app is integrated with the current Node API for authentication,
+profiles, members, plans, subscriptions, attendance, payments, classes,
+bookings, trainer assignments, notifications, staff administration, reports,
+audit logs, system settings, and health status. Admin-created members and staff
+are persisted through API endpoints; membership checkout uses the backend's
+mock payment lifecycle.
 
-The backend does not currently expose admin endpoints to create staff or
-members. Admin member creation is therefore not offered; the existing
-trainer/manager forms remain local demo functionality. The frontend also does
-not submit payments through `POST /api/payments`, which currently records a
-payment as completed without a payment-provider workflow.
+Checkout is deliberately a mock provider integration: no card number or CVV is
+collected. Custom roles/permission policies and workout programs are not
+exposed by the current API, so the client does not present them as editable
+features. Historical examples below may describe earlier integration stages;
+use this coverage summary and the service files as the source of truth.
+
+## Current React coverage
+
+| Backend capability | React integration |
+|---|---|
+| Authentication, refresh, member profile and picture | Auth and profile services/pages |
+| Member CRUD and status | Admin member screens |
+| Plans and subscriptions | Public plans, member management, admin approval/rejection/renewal |
+| Mock checkout, payment history and staff payments | Member checkout, dashboard history, admin payment tools |
+| Attendance check-in/out and reports | Admin and manager operations |
+| Classes, schedules and bookings | Member booking page and admin class operations |
+| Trainer directory and assignments | Member self-assignment and admin assignment management |
+| Notifications | Signed-in inbox and admin broadcast |
+| Staff, reports, settings, audit log, dashboard metrics | Admin operations and dashboard |
+
+Run API migrations before using database-backed features. Trainer assignment
+support requires the migration documented in the Node project's
+`docs/MEMBER_CLASSES_API.md`.
 
 ## ✅ What Was Done
 

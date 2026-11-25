@@ -2,8 +2,7 @@ import { useState } from 'react';
 import FormField from '../auth/FormField.jsx';
 import Button from '../ui/Button.jsx';
 import Icon from '../ui/Icon.jsx';
-import { createUser } from '../../services/dataService.js';
-import { getAllPlans } from '../../services/dataService.js';
+import { createMember } from '../../services/adminService.js';
 import './AdminForms.css';
 
 export default function AddMemberForm({ onSuccess, onCancel }) {
@@ -18,10 +17,7 @@ export default function AddMemberForm({ onSuccess, onCancel }) {
     gender: '',
     address: '',
     emergencyContact: '',
-    planId: '',
   });
-
-  const plans = getAllPlans();
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -47,10 +43,7 @@ export default function AddMemberForm({ onSuccess, onCancel }) {
     setLoading(true);
 
     try {
-      const newMember = await createUser({
-        ...values,
-        role: 'member',
-      });
+      const newMember = await createMember(values);
       
       onSuccess(newMember);
     } catch (err) {
@@ -138,23 +131,6 @@ export default function AddMemberForm({ onSuccess, onCancel }) {
           </select>
         </div>
 
-        <div className="admin-form__field">
-          <label htmlFor="planId" className="admin-form__label">Membership Plan</label>
-          <select
-            id="planId"
-            name="planId"
-            value={values.planId}
-            onChange={handleChange}
-            className="admin-form__select"
-          >
-            <option value="">No Plan (Pay as you go)</option>
-            {plans.filter(p => p.isActive).map(plan => (
-              <option key={plan.id} value={plan.id}>
-                {plan.name} - ${plan.price}/{plan.duration}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       <FormField

@@ -1,0 +1,229 @@
+.member-classes__main {
+  padding-block: 3rem 5rem;
+}
+
+.member-classes__header,
+.member-classes__booking {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.member-classes__header {
+  margin-bottom: 2rem;
+}
+
+.member-classes__header h1 {
+  margin: 0.4rem 0;
+  font-size: clamp(2rem, 5vw, 3.4rem);
+}
+
+.member-classes__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border, rgba(255,255,255,.12));
+}
+
+.member-classes__tabs button {
+  padding: 0.85rem 1rem;
+  color: var(--color-text-muted, #a5a8ad);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.member-classes__tabs button.is-active {
+  color: var(--color-accent, #d6ff3f);
+  border-bottom-color: var(--color-accent, #d6ff3f);
+}
+
+.member-classes__section {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.member-classes__filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.member-classes__filters label,
+.member-classes__notes {
+  display: grid;
+  gap: 0.4rem;
+  min-width: min(100%, 15rem);
+}
+
+.member-classes__filters select,
+.member-classes__filters input,
+.member-classes__notes input {
+  min-height: 2.8rem;
+  padding: 0.65rem 0.8rem;
+  color: inherit;
+  border: 1px solid var(--color-border, rgba(255,255,255,.16));
+  border-radius: 0.35rem;
+  background: var(--color-surface, #17191c);
+}
+
+.member-classes__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+}
+
+.member-classes__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 1.25rem;
+}
+
+.member-classes__card h2,
+.member-classes__card h3,
+.member-classes__booking h2 {
+  margin: 0;
+}
+
+.member-classes__card p {
+  margin: 0;
+}
+
+.member-classes__card-top,
+.member-classes__when {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.member-classes__card-top {
+  justify-content: space-between;
+  width: 100%;
+  color: var(--color-text-muted, #a5a8ad);
+  font-size: 0.82rem;
+}
+
+.member-classes__tag,
+.member-classes__status,
+.member-classes__booking-state {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(214,255,63,.1);
+  color: var(--color-accent, #d6ff3f);
+  font-size: 0.78rem;
+  text-transform: capitalize;
+}
+
+.member-classes__when {
+  color: var(--color-text-muted, #a5a8ad);
+  font-size: 0.9rem;
+}
+
+.member-classes__details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  gap: 0.75rem;
+  margin: 0.4rem 0;
+}
+
+.member-classes__details div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.member-classes__details dt {
+  color: var(--color-text-muted, #a5a8ad);
+  font-size: 0.75rem;
+}
+
+.member-classes__details dd {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.member-classes__card > button {
+  margin-top: auto;
+}
+
+.member-classes__booking-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.member-classes__booking {
+  align-items: center;
+  padding: 1.2rem;
+}
+
+.member-classes__booking p {
+  margin: 0.4rem 0 0;
+}
+
+.member-classes__status--cancelled,
+.member-classes__status--no_show {
+  background: rgba(255, 87, 87, .12);
+  color: #ff8282;
+}
+
+.member-classes__status--attended,
+.member-classes__status--confirmed {
+  background: rgba(78, 201, 140, .12);
+  color: #70daa3;
+}
+
+.member-classes__notes {
+  max-width: 32rem;
+}
+
+.member-classes__trainer-photo {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.member-classes__empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.8rem;
+  padding: 2.5rem 1rem;
+  color: var(--color-text-muted, #a5a8ad);
+  text-align: center;
+}
+
+.member-classes__alert {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.4rem;
+}
+
+.member-classes__alert--error {
+  color: #ff9292;
+  background: rgba(255, 80, 80, .1);
+}
+
+.member-classes__alert--success {
+  color: #78dfa6;
+  background: rgba(78, 201, 140, .1);
+}
+
+@media (max-width: 640px) {
+  .member-classes__header,
+  .member-classes__booking {
+    flex-direction: column;
+  }
+
+  .member-classes__header > button,
+  .member-classes__booking > button {
+    width: 100%;
+  }
+}
